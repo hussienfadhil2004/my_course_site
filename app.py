@@ -560,4 +560,4 @@ if __name__ == '__main__':
         seed_database()
     port = int(os.environ.get("PORT", 5000))
     print(f"✅ الموقع يعمل على المنفذ: {port}")
-    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)
