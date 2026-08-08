@@ -1,0 +1,108 @@
+:root {
+    --bg-color: #ffffff;
+    --text-color: #212529;
+    --card-bg: #f8f9fa;
+    --navbar-bg: #0d6efd;
+    --border-color: #dee2e6;
+}
+
+body.dark-mode {
+    --bg-color: #1a1a2e;
+    --text-color: #e0e0e0;
+    --card-bg: #16213e;
+    --navbar-bg: #0f3460;
+    --border-color: #533483;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.navbar {
+    background-color: var(--navbar-bg) !important;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.card-body {
+    color: var(--text-color);
+}
+
+.list-group-item {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+.chat-messages {
+    height: 60vh;
+    overflow-y: auto;
+    background-color: var(--card-bg);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.message {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    max-width: 80%;
+    clear: both;
+}
+
+.message.sent {
+    background-color: #dcf8c6;
+    float: right;
+    text-align: right;
+}
+
+.message.received {
+    background-color: #ffffff;
+    float: left;
+    border: 1px solid #e0e0e0;
+}
+
+.dark-mode .message.received {
+    background-color: #2a2a3c;
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.status-icons {
+    font-size: 0.8rem;
+    margin-left: 5px;
+}
+
+.lesson-content {
+    white-space: pre-wrap;
+    line-height: 2;
+    font-size: 1.1rem;
+}
+
+.profile-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.message {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    max-width: 80%;
+    clear: both;
+}
+.message.sent {
+    background-color: #dcf8c6;
+    float: right;
+}
+.message.received {
+    background-color: #f1f0f0;
+    float: left;
+}

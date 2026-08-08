@@ -1,0 +1,10 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>المستخدمين</h3>
+<table class="table">
+<tr><th>المعرف</th><th>الاسم</th><th>الدور</th><th>آخر ظهور</th></tr>
+{% for u in users %}
+<tr><td>{{ u.student_id }}</td><td>{{ u.full_name }}</td><td>{{ u.role }}</td><td>{{ u.last_seen }}</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

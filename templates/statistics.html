@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>إحصائياتي</h2>
+<p>الدروس المكتملة: <span id="completed-text">{{ completed }}</span> / <span id="total-text">{{ total_lessons }}</span></p>
+<div class="progress">
+    <div id="lesson-bar" class="progress-bar" role="progressbar"></div>
+</div>
+<p class="mt-2">النسبة: <span id="percent-text"></span></p>
+<p>متوسط درجات الاختبارات: {{ avg_score }}%</p>
+<p>ترتيبك: {% if rank %}#{{ rank }}{% else %}غير متوفر{% endif %}</p>
+<h5>آخر النتائج</h5>
+<ul>
+{% for r in last_results %}
+    <li>{{ r.timestamp.strftime('%Y-%m-%d') }}: {{ r.score }}%</li>
+{% endfor %}
+</ul>
+<a href="/certificate" class="btn btn-success">تحميل الشهادة</a>
+<script>
+    var bar = document.getElementById('lesson-bar');
+    var percent = parseFloat('{{ progress_percent }}');
+    bar.style.width = percent + '%';
+    bar.textContent = percent + '%';
+    document.getElementById('percent-text').textContent = percent + '%';
+</script>
+{% endblock %}

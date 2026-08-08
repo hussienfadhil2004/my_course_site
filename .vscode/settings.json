@@ -1,9 +1,0 @@
-{
-    "python.analysis.extraPaths": [
-        "C:\\Users\\Ahmed\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
-    ],
-    "python.analysis.diagnosticSeverity": {
-        "reportMissingImports": "none",
-        "reportMissingModuleSource": "none"
-    }
-}

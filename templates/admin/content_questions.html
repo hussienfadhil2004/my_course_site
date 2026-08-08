@@ -1,0 +1,50 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>إدارة الأسئلة ({{ questions|length }} سؤال)</h3>
+<form method="POST" action="/admin/question/add" class="mb-4 p-3 border">
+    <div class="mb-2"><input name="question_text" class="form-control" placeholder="نص السؤال" required></div>
+    <div class="row">
+        <div class="col-md-6 mb-2"><input name="option_a" class="form-control" placeholder="الخيار أ"></div>
+        <div class="col-md-6 mb-2"><input name="option_b" class="form-control" placeholder="الخيار ب"></div>
+        <div class="col-md-6 mb-2"><input name="option_c" class="form-control" placeholder="الخيار ج"></div>
+        <div class="col-md-6 mb-2"><input name="option_d" class="form-control" placeholder="الخيار د"></div>
+    </div>
+    <select name="correct_answer" class="form-control mb-2">
+        <option value="a">أ</option><option value="b">ب</option><option value="c">ج</option><option value="d">د</option>
+    </select>
+    <button class="btn btn-primary">إضافة سؤال</button>
+</form>
+<table class="table">
+<tr><th>السؤال</th><th>الجواب</th><th>إجراءات</th></tr>
+{% for q in questions %}
+<tr>
+    <td>{{ q.question_text[:50] }}...</td>
+    <td>{{ q.correct_answer }}</td>
+    <td>
+        <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editQ{{ q.id }}">تعديل</button>
+        <a href="/admin/question/delete/{{ q.id }}" class="btn btn-sm btn-danger">حذف</a>
+    </td>
+</tr>
+{% endfor %}
+</table>
+{% for q in questions %}
+<div class="modal fade" id="editQ{{ q.id }}">
+  <form method="POST" action="/admin/question/edit/{{ q.id }}" class="modal-dialog">
+    <div class="modal-content p-3">
+      <input name="question_text" value="{{ q.question_text }}" class="form-control mb-2">
+      <input name="option_a" value="{{ q.option_a }}" class="form-control mb-2">
+      <input name="option_b" value="{{ q.option_b }}" class="form-control mb-2">
+      <input name="option_c" value="{{ q.option_c }}" class="form-control mb-2">
+      <input name="option_d" value="{{ q.option_d }}" class="form-control mb-2">
+      <select name="correct_answer" class="form-control mb-2">
+        <option value="a" {% if q.correct_answer=='a' %}selected{% endif %}>أ</option>
+        <option value="b" {% if q.correct_answer=='b' %}selected{% endif %}>ب</option>
+        <option value="c" {% if q.correct_answer=='c' %}selected{% endif %}>ج</option>
+        <option value="d" {% if q.correct_answer=='d' %}selected{% endif %}>د</option>
+      </select>
+      <button class="btn btn-success">حفظ</button>
+    </div>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

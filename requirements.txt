@@ -1,6 +1,9 @@
-flask
-flask-sqlalchemy
-flask-login
-flask-socketio
-eventlet
-werkzeug
+Flask==2.3.2
+Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.2
+Flask-SocketIO==5.3.4
+eventlet==0.33.3
+Werkzeug==2.3.6
+Pillow==10.0.0
+fpdf2==2.7.4
+python-dotenv==1.0.0

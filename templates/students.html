@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>الطلاب</h2>
+<div class="row">
+{% for student in users %}
+    <div class="col-md-2 text-center mb-3">
+        <a href="/student/{{ student.id }}"><img src="{{ url_for('static', filename='uploads/'+student.profile_pic) }}" class="rounded-circle" width="60"><p>{% if student.show_real_name %}{{ student.full_name }}{% else %}{{ student.username }}{% endif %}</p></a>
+    </div>
+{% endfor %}
+</div>
+{% endblock %}

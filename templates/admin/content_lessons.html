@@ -1,0 +1,23 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>الدروس</h3>
+<form method="POST" action="/admin/lesson/add">
+    <input name="title" placeholder="العنوان" required>
+    <textarea name="content" placeholder="المحتوى"></textarea>
+    <input name="order" type="number" placeholder="الترتيب" required>
+    <button class="btn btn-primary">إضافة</button>
+</form>
+<hr>
+{% for l in lessons %}
+<div class="card p-2 mb-2">
+    <h5>{{ l.order }}. {{ l.title }}</h5>
+    <form method="POST" action="/admin/lesson/edit/{{ l.id }}">
+        <input name="title" value="{{ l.title }}">
+        <textarea name="content">{{ l.content }}</textarea>
+        <input name="order" value="{{ l.order }}" type="number">
+        <button class="btn btn-warning btn-sm">تعديل</button>
+    </form>
+    <a href="/admin/lesson/delete/{{ l.id }}" class="btn btn-danger btn-sm">حذف</a>
+</div>
+{% endfor %}
+{% endblock %}

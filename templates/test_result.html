@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>نتيجة الاختبار</h2>
+<p>الإجابات الصحيحة: {{ score }} من {{ total }}</p>
+<div class="progress" style="height: 30px;">
+    <div id="result-bar" class="progress-bar bg-success" role="progressbar"></div>
+</div>
+<p class="mt-2 text-center fw-bold" id="result-text"></p>
+<a href="/test" class="btn btn-warning mt-3">إعادة الاختبار</a>
+<a href="/statistics" class="btn btn-info mt-3">إحصائياتي</a>
+<script>
+    var bar = document.getElementById('result-bar');
+    var val = parseFloat('{{ percentage|round(1) }}');
+    bar.style.width = val + '%';
+    bar.textContent = val + '%';
+    document.getElementById('result-text').textContent = 'لقد حصلت على ' + val + '%';
+</script>
+{% endblock %}

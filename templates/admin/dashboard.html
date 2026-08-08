@@ -1,0 +1,7 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>لوحة التحكم</h3>
+<p>عدد المستخدمين: {{ user_count }}</p>
+<p>النشطاء اليوم: {{ active_today }}</p>
+<p>طلبات استعادة معلقة: {{ pending }}</p>
+{% endblock %}

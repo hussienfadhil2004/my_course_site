@@ -1,0 +1,8 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>إرسال إشعار جماعي</h3>
+<form method="POST" action="/admin/send-notification">
+    <textarea name="message" class="form-control mb-2" rows="4" placeholder="نص الإشعار"></textarea>
+    <button class="btn btn-warning">إرسال لجميع الطلاب</button>
+</form>
+{% endblock %}

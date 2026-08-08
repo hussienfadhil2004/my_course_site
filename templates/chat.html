@@ -1,69 +1,62 @@
 {% extends "base.html" %}
-{% block title %}الدردشة الجماعية{% endblock %}
 {% block content %}
-<div class="chat-container">
-    <h2><i class="fas fa-comments"></i> الدردشة الجماعية</h2>
-    <div id="chat-messages" class="chat-messages">
-        {% for message in messages %}
-        <div class="message">
-            <strong>{{ message.sender.full_name }}</strong>
-            <span class="text-muted">(@{{ message.sender.username }})</span>
-            <span class="timestamp">{{ message.created_at.strftime('%H:%M') }}</span>
-            <p>{{ message.content }}</p>
+<h3>الدردشة العامة</h3>
+<div class="card">
+    <div class="card-body" id="chat-box" style="height: 60vh; overflow-y: auto;"></div>
+    <div class="card-footer">
+        <div class="input-group">
+            <input type="text" id="message-input" class="form-control" placeholder="اكتب رسالة...">
+            <button class="btn btn-primary" id="send-btn">إرسال</button>
         </div>
-        {% endfor %}
-        <div id="typing-indicator" class="typing-indicator"></div>
-    </div>
-    
-    <div class="chat-input-area">
-        <input type="text" id="chat-input" class="chat-input" placeholder="اكتب رسالتك..." onkeypress="if(event.key === 'Enter') sendMessage()">
-        <button class="btn btn-primary" onclick="sendMessage()"><i class="fas fa-paper-plane"></i> إرسال</button>
     </div>
 </div>
-
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
-    let socket;
+const socket = io();
+const chatBox = document.getElementById('chat-box');
+const msgInput = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const currentUserId = parseInt('{{ current_user.id }}');
 
-    function initChat() {
-        socket = io();
-        
-        socket.on('new_message', function(data) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message';
-            messageDiv.innerHTML = `
-                <strong>${data.user}</strong>
-                <span class="text-muted">(@${data.username})</span>
-                <span class="timestamp">${data.timestamp}</span>
-                <p>${data.content}</p>
-            `;
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        });
-
-        socket.on('typing', function(data) {
-            const indicator = document.getElementById('typing-indicator');
-            indicator.textContent = `${data.username} يكتب...`;
-            clearTimeout(indicator.timeout);
-            indicator.timeout = setTimeout(() => {
-                indicator.textContent = '';
-            }, 3000);
-        });
+socket.on('new_message', function(msg) {
+    const div = document.createElement('div');
+    if (msg.sender_id === currentUserId) {
+        div.className = 'message sent';
+    } else {
+        div.className = 'message received';
     }
+    div.innerHTML = '<strong>' + msg.sender_name + '</strong>: ' + msg.text + ' <small>' + msg.timestamp + '</small>';
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
 
-    function sendMessage() {
-        const input = document.getElementById('chat-input');
-        const content = input.value.trim();
-        if (content) {
-            socket.emit('send_message', { content: content });
-            input.value = '';
-        }
-    }
+function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    socket.emit('send_message', { text: text });
+    msgInput.value = '';
+}
 
-    document.addEventListener('DOMContentLoaded', function() {
-        if (document.getElementById('chat-messages')) {
-            initChat();
+sendBtn.addEventListener('click', sendMessage);
+msgInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendMessage();
+});
+
+fetch('/api/messages').then(function(r) { return r.json(); }).then(function(msgs) {
+    chatBox.innerHTML = '';
+    msgs.forEach(function(m) {
+        const div = document.createElement('div');
+        if (m.sender_id === currentUserId) {
+            div.className = 'message sent';
+        } else {
+            div.className = 'message received';
         }
+        div.innerHTML = '<strong>' + m.sender_name + '</strong>: ' + m.text + ' <small>' + m.timestamp + '</small>';
+        chatBox.appendChild(div);
     });
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
 </script>
 {% endblock %}

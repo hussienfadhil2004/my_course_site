@@ -1,0 +1,10 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>سجل التدقيق</h3>
+<table class="table">
+<tr><th>التاريخ</th><th>المستخدم</th><th>الإجراء</th></tr>
+{% for log in logs %}
+<tr><td>{{ log.timestamp }}</td><td>{{ log.user_id }}</td><td>{{ log.action }}</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

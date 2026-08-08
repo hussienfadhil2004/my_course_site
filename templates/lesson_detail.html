@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ lesson.title }}</h2>
+<hr>
+<div style="white-space: pre-wrap; line-height: 2;">{{ lesson.content }}</div>
+<a href="/lessons" class="btn btn-secondary mt-3">← العودة للدروس</a>
+{% endblock %}

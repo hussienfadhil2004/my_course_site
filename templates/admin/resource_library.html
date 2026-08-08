@@ -1,0 +1,23 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<h3>مكتبة الموارد</h3>
+<form method="POST" action="/admin/resource/add" enctype="multipart/form-data" class="mb-4">
+    <input name="title" class="form-control mb-2" placeholder="العنوان" required>
+    <select name="type" class="form-control mb-2">
+        <option value="pdf">PDF</option>
+        <option value="video">فيديو</option>
+        <option value="link">رابط</option>
+    </select>
+    <input type="file" name="file" class="form-control mb-2">
+    <input name="url" class="form-control mb-2" placeholder="أو رابط خارجي">
+    <button class="btn btn-primary">إضافة</button>
+</form>
+<ul class="list-group">
+{% for r in resources %}
+    <li class="list-group-item d-flex justify-content-between">
+        {{ r.title }} ({{ r.type }})
+        <a href="/admin/resource/delete/{{ r.id }}" class="btn btn-sm btn-danger">حذف</a>
+    </li>
+{% endfor %}
+</ul>
+{% endblock %}

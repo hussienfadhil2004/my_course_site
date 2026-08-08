@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-3">
+    <img src="{{ url_for('static', filename='uploads/'+user.profile_pic) }}" class="rounded-circle mx-auto d-block" width="100">
+    <h3 class="text-center">{% if user.show_real_name %}{{ user.full_name }}{% else %}{{ user.username }}{% endif %}</h3>
+    <p class="text-center">{{ user.bio }}</p>
+    {% if user.telegram_link %}<a href="{{ user.telegram_link }}" class="btn btn-info btn-sm">تيليجرام</a>{% endif %}
+    {% if user.whatsapp_link %}<a href="{{ user.whatsapp_link }}" class="btn btn-success btn-sm">واتساب</a>{% endif %}
+    <p>المستوى: {{ user.level }}</p>
+</div>
+{% endblock %}
