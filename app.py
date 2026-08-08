@@ -637,6 +637,40 @@ def admin_announcements():
     return render_template('admin/announcements.html', announcements=anns)
 
 # ---------- WebSocket ----------
+@socketio.on('connect')
+def handle_connect():
+    if current_user.is_authenticated and not current_user.banned:
+        current_user.status = 'متصل'
+        current_user.last_seen = datetime.utcnow()
+        db.session.commit()
+        online_users.setdefault(current_user.id, set()).add(request.sid)
+        emit('update_online', get_online_users_with_status(), broadcast=True)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    if current_user.is_authenticated:
+        if current_user.id in online_users:
+            online_users[current_user.id].discard(request.sid)
+            if not online_users[current_user.id]:
+                del online_users[current_user.id]
+                current_user.status = 'غير متصل'
+                current_user.last_seen = datetime.utcnow()
+                db.session.commit()
+                emit('update_online', get_online_users_with_status(), broadcast=True)
+
+def get_online_users_with_status():
+    result = []
+    for uid in online_users:
+        u = User.query.get(uid)
+        if u:
+            result.append({
+                'id': uid,
+                'name': u.full_name if u.show_real_name else u.username,
+                'status': u.status,
+                'last_seen': u.last_seen.strftime('%H:%M') if u.last_seen else ''
+            })
+    return result
+
 @socketio.on('send_message')
 def handle_message(data):
     if not current_user.is_authenticated or current_user.banned: return
@@ -650,15 +684,99 @@ def handle_message(data):
     db.session.add(msg)
     db.session.commit()
     sender_name = current_user.full_name if current_user.show_real_name else current_user.username
-    emit('new_message', {
+    sender_pic = current_user.profile_pic if current_user.profile_pic != 'default.png' else ''
+    msg_data = {
         'id': msg.id,
         'sender_id': current_user.id,
         'sender_name': sender_name,
+        'sender_pic': sender_pic,
         'text': msg.text,
         'timestamp': msg.timestamp.strftime('%H:%M'),
+        'reply_to': msg.reply_to_id,
+        'edited': False,
         'file_path': None,
         'recipient_id': msg.recipient_id
-    }, broadcast=True)
+    }
+    if recipient_id:
+        emit('new_private_message', msg_data, room=f'user_{recipient_id}')
+        emit('new_private_message', msg_data, room=request.sid)
+    else:
+        emit('new_message', msg_data, broadcast=True)
+
+@socketio.on('edit_message')
+def handle_edit(data):
+    if not current_user.is_authenticated: return
+    msg_id = data.get('message_id')
+    new_text = data.get('text','').strip()
+    msg = Message.query.get(msg_id)
+    if not msg: return
+    if current_user.role == 'admin' or (msg.sender_id == current_user.id and (datetime.utcnow() - msg.timestamp).seconds < 300):
+        msg.text = new_text
+        msg.edited = True
+        msg.edited_at = datetime.utcnow()
+        db.session.commit()
+        emit('message_edited', {'message_id': msg_id, 'text': new_text}, broadcast=True)
+
+@socketio.on('delete_message')
+def handle_delete(data):
+    if not current_user.is_authenticated: return
+    msg_id = data.get('message_id')
+    msg = Message.query.get(msg_id)
+    if not msg: return
+    if current_user.role == 'admin' or (msg.sender_id == current_user.id and (datetime.utcnow() - msg.timestamp).seconds < 300):
+        db.session.delete(msg)
+        db.session.commit()
+        emit('message_deleted', {'message_id': msg_id}, broadcast=True)
+
+@app.route('/upload_chat_file', methods=['POST'])
+@login_required
+def upload_chat_file():
+    file = request.files.get('file')
+    if file and allowed_file(file.filename):
+        filename = secure_filename(f"{current_user.id}_{int(time.time())}_{file.filename}")
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        msg = Message(sender_id=current_user.id, text='', file_path=filename)
+        recipient_id = request.form.get('recipient_id')
+        if recipient_id:
+            msg.recipient_id = int(recipient_id)
+        db.session.add(msg)
+        db.session.commit()
+        file_url = url_for('static', filename='uploads/'+filename)
+        sender_name = current_user.full_name if current_user.show_real_name else current_user.username
+        msg_data = {
+            'id': msg.id, 'sender_id': current_user.id, 'sender_name': sender_name,
+            'text': '', 'timestamp': msg.timestamp.strftime('%H:%M'),
+            'file_path': file_url, 'edited': False, 'recipient_id': msg.recipient_id
+        }
+        socketio.emit('new_message', msg_data, broadcast=True)
+        return jsonify({'success': True, 'file_url': file_url})
+    return jsonify({'success': False})
+
+@app.route('/api/messages')
+@login_required
+def api_messages():
+    msgs = Message.query.filter((Message.recipient_id.is_(None)) | (Message.recipient_id == current_user.id) | (Message.sender_id == current_user.id)).order_by(Message.timestamp.asc()).all()
+    res = []
+    for m in msgs:
+        s = m.sender
+        sname = s.full_name if s.show_real_name else s.username
+        spic = s.profile_pic if s.profile_pic != 'default.png' else ''
+        res.append({
+            'id': m.id, 'sender_id': m.sender_id, 'sender_name': sname,
+            'sender_pic': spic,
+            'text': m.text, 'timestamp': m.timestamp.strftime('%H:%M'),
+            'reply_to': m.reply_to_id, 'edited': m.edited,
+            'file_path': url_for('static', filename='uploads/'+m.file_path) if m.file_path else None,
+            'recipient_id': m.recipient_id
+        })
+    return jsonify(res)
+
+@app.route('/api/users')
+@login_required
+def api_users():
+    users = User.query.filter(User.id != current_user.id, User.banned == False).all()
+    return jsonify([{'id': u.id, 'name': u.full_name if u.show_real_name else u.username, 'status': u.status, 'last_seen': u.last_seen.strftime('%H:%M') if u.last_seen else ''} for u in users])
 
 if __name__ == '__main__':
     with app.app_context():

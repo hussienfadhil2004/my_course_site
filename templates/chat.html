@@ -18,19 +18,13 @@
                 <small>جميع الطلاب المتصلين</small>
             </div>
             <div class="chat-messages" id="chat-box"></div>
-            <!-- معاينة الصورة قبل الإرسال -->
-            <div id="image-preview-container" style="display:none; padding:5px; background:#f1f1f1; border-top:1px solid #ddd;">
-                <span onclick="cancelImage()" style="cursor:pointer;float:right;color:red;">✖</span>
-                <img id="image-preview" src="" style="max-height:100px; border-radius:8px;">
-                <button class="btn btn-sm btn-success mt-1" onclick="sendImage()">📨 إرسال الصورة</button>
-            </div>
             <div class="chat-footer">
                 <div class="input-group">
                     <button class="btn btn-outline-secondary emoji-btn" type="button" id="emoji-btn">😊</button>
                     <button class="btn btn-outline-secondary" type="button" id="file-btn">📎</button>
-                    <input type="file" id="file-input" style="display:none" accept="image/*,application/pdf,.doc,.docx,.mp4,.webm">
+                    <input type="file" id="file-input" style="display:none">
                     <input type="text" id="message-input" class="form-control" placeholder="اكتب رسالتك... استخدم @ لمنشن" autocomplete="off">
-                    <button class="btn btn-primary" id="send-btn">📨 إرسال</button>
+                    <button class="btn btn-primary" id="send-btn">📨</button>
                 </div>
                 <div id="emoji-picker" style="display:none; position:absolute; bottom:60px; z-index:999; background:white; border:1px solid #ccc; border-radius:10px; padding:10px; max-width:300px;"></div>
                 <div id="mention-list" style="display:none; position:absolute; bottom:60px; z-index:999; background:white; border:1px solid #ccc; border-radius:10px; max-height:150px; overflow-y:auto; width:200px;"></div>
@@ -56,225 +50,159 @@
 </div>
 
 <style>
-.message-wrapper .message-actions { display: none; position: absolute; top: -10px; right: 10px; }
-.message-wrapper:hover .message-actions { display: block; }
-.message-actions button { font-size: 0.7rem; padding: 0 5px; }
-.edited-badge { font-size: 0.7rem; color: #888; }
-.message-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
-.chat-messages img { max-width: 200px; border-radius: 10px; cursor: pointer; }
+    .chat-container { border: 1px solid #ddd; border-radius: 15px; overflow: hidden; background: #f8f9fa; max-width: 100%; margin: 0 auto; }
+    .chat-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 20px; text-align: center; }
+    .chat-messages { height: 55vh; overflow-y: auto; padding: 20px; background: #e5ddd5; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23f5f0eb" width="100" height="100"/></svg>'); }
+    .chat-footer { padding: 10px 15px; background: white; border-top: 1px solid #ddd; }
+    .chat-footer .form-control { border-radius: 25px; padding: 8px 15px; border: 1px solid #ddd; }
+    .chat-footer .btn { border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    .message-wrapper { display: flex; margin-bottom: 12px; align-items: flex-end; }
+    .message-wrapper.sent { flex-direction: row-reverse; }
+    .message-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; margin: 0 8px; }
+    .message-bubble { max-width: 70%; padding: 8px 14px; border-radius: 18px; font-size: 0.95rem; line-height: 1.4; word-wrap: break-word; position: relative; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .sent .message-bubble { background: #dcf8c6; border-bottom-right-radius: 5px; }
+    .received .message-bubble { background: white; border-bottom-left-radius: 5px; }
+    .message-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+    .message-sender { font-weight: bold; font-size: 0.8rem; color: #4a4a4a; }
+    .message-time { font-size: 0.7rem; color: #999; margin-left: 10px; }
+    .message-actions { display: flex; gap: 8px; margin-top: 4px; justify-content: flex-end; }
+    .message-actions button { background: none; border: none; color: #888; font-size: 0.85rem; cursor: pointer; padding: 2px 5px; border-radius: 10px; }
+    .message-actions button:hover { background: rgba(0,0,0,0.05); color: #333; }
+    .edited-badge { font-size: 0.7rem; color: #888; margin-left: 5px; }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
-const socket = io();
-const currentUserId = parseInt('{{ current_user.id }}');
-const currentUserName = "{{ current_user.full_name if current_user.show_real_name else current_user.username }}";
-let activePrivateRecipient = null;
-let replyToId = null;
-let editingMessageId = null;
-let allUsers = [];
-let pendingImageFile = null;
+    const socket = io();
+    const currentUserId = parseInt('{{ current_user.id }}');
+    const currentUserName = "{{ current_user.full_name if current_user.show_real_name else current_user.username }}";
+    let activePrivateRecipient = null;
+    let replyToId = null;
+    let editingMessageId = null;
+    let allUsers = [];
 
-// --- Emoji Picker ---
-const emojis = ['😀','😂','😍','😎','🤔','😢','😡','👍','👎','❤️','🔥','🎉','💯','✅','❌','⭐','📚','💻','🎓','🏆','⚡','💡','📌','✏️','🗑️'];
-const emojiPicker = document.getElementById('emoji-picker');
-emojiPicker.innerHTML = emojis.map(e => `<span style="cursor:pointer;font-size:1.5rem;margin:2px;" onclick="insertEmoji('${e}')">${e}</span>`).join('');
-document.getElementById('emoji-btn').addEventListener('click', () => emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'block' : 'none');
-function insertEmoji(emoji) {
-    const input = document.getElementById('message-input');
-    input.value += emoji;
-    input.focus();
-    emojiPicker.style.display = 'none';
-}
+    // Emoji
+    const emojis = ['😀','😂','😍','😎','🤔','😢','😡','👍','👎','❤️','🔥','🎉','💯','✅','❌','⭐','📚','💻','🎓','🏆','⚡','💡','📌','✏️','🗑️'];
+    const emojiPicker = document.getElementById('emoji-picker');
+    emojiPicker.innerHTML = emojis.map(e => `<span style="cursor:pointer;font-size:1.5rem;margin:2px;" onclick="insertEmoji('${e}')">${e}</span>`).join('');
+    document.getElementById('emoji-btn').addEventListener('click', () => emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'block' : 'none');
+    function insertEmoji(emoji) { const inp = document.getElementById('message-input'); inp.value += emoji; inp.focus(); emojiPicker.style.display = 'none'; }
 
-// --- File Upload with Preview ---
-document.getElementById('file-btn').addEventListener('click', () => document.getElementById('file-input').click());
-document.getElementById('file-input').addEventListener('change', function() {
-    const file = this.files[0];
-    if (!file) return;
-    // إذا كانت صورة، اعرض معاينة
-    if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('image-preview').src = e.target.result;
-            document.getElementById('image-preview-container').style.display = 'block';
-            pendingImageFile = file;
-        };
-        reader.readAsDataURL(file);
-    } else {
-        // ملف غير صورة: أرسل مباشرة
-        uploadFile(file);
-    }
-    this.value = '';
-});
-
-function cancelImage() {
-    document.getElementById('image-preview-container').style.display = 'none';
-    pendingImageFile = null;
-}
-
-function sendImage() {
-    if (pendingImageFile) {
-        uploadFile(pendingImageFile);
-        cancelImage();
-    }
-}
-
-function uploadFile(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-    fetch('/upload_chat_file', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                alert('فشل رفع الملف. تأكد من الحجم والنوع.');
-            }
-        })
-        .catch(() => alert('خطأ في الاتصال بالخادم'));
-}
-
-// --- Mentions ---
-const mentionList = document.getElementById('mention-list');
-const msgInput = document.getElementById('message-input');
-msgInput.addEventListener('input', function() {
-    const val = this.value;
-    const lastAt = val.lastIndexOf('@');
-    if (lastAt >= 0 && (lastAt === 0 || val[lastAt-1] === ' ')) {
-        const query = val.substring(lastAt+1).toLowerCase();
-        const filtered = allUsers.filter(u => u.name.toLowerCase().includes(query)).slice(0, 5);
-        mentionList.innerHTML = filtered.map(u => `<div class="mention-item" style="padding:5px;cursor:pointer;" onclick="selectMention(${u.id}, '${u.name}')">${u.name}</div>`).join('');
-        mentionList.style.display = filtered.length ? 'block' : 'none';
-    } else { mentionList.style.display = 'none'; }
-});
-function selectMention(id, name) {
-    const val = msgInput.value;
-    const lastAt = val.lastIndexOf('@');
-    msgInput.value = val.substring(0, lastAt) + '@' + name + ' ';
-    mentionList.style.display = 'none';
-    msgInput.focus();
-}
-
-// --- Render Message ---
-function renderMessage(msg, boxId) {
-    const box = document.getElementById(boxId || 'chat-box');
-    const isSent = msg.sender_id === currentUserId;
-    const wrapper = document.createElement('div');
-    wrapper.className = 'message-wrapper ' + (isSent ? 'sent' : 'received');
-    wrapper.id = 'msg-' + msg.id;
-    let content = '';
-    if (msg.reply_to) {
-        const replied = document.querySelector(`#msg-${msg.reply_to} .message-bubble`);
-        if (replied) content += `<div style="font-size:0.8rem;color:#888;border-left:3px solid #ccc;padding-left:5px;margin-bottom:3px;">${replied.innerText.substring(0,50)}...</div>`;
-    }
-    if (msg.file_path) {
-        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.file_path);
-        if (isImage) {
-            content += `<img src="${msg.file_path}" loading="lazy" onclick="window.open(this.src)" title="اضغط للتكبير">`;
-        } else {
-            content += `<a href="${msg.file_path}" target="_blank">📎 ملف مرفوع</a>`;
-        }
-    } else {
-        content += msg.text;
-        if (msg.edited) content += ' <span class="edited-badge">(معدل)</span>';
-    }
-    wrapper.innerHTML = `
-        <img src="${msg.sender_pic || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(msg.sender_name) + '&background=667eea&color=fff&size=72'}" class="message-avatar">
-        <div class="message-content">
-            <div class="message-sender-name">${msg.sender_name}</div>
-            <div class="message-bubble">${content}</div>
-            <small class="message-time">${msg.timestamp}</small>
-            ${isSent ? `<div class="message-actions"><button onclick="editMessage(${msg.id}, '${(msg.text||'').replace(/'/g, "\\'")}')">✏️</button><button onclick="deleteMessage(${msg.id})">🗑️</button><button onclick="replyMessage(${msg.id})">↩️</button></div>` : `<div class="message-actions"><button onclick="replyMessage(${msg.id})">↩️</button></div>`}
-        </div>
-    `;
-    if (msg.sender_id !== currentUserId) {
-        wrapper.querySelector('.message-avatar').addEventListener('click', () => openPrivateChat(msg.sender_id, msg.sender_name));
-    }
-    box.appendChild(wrapper);
-    box.scrollTop = box.scrollHeight;
-}
-
-// --- CRUD Messages ---
-function replyMessage(id) { replyToId = id; msgInput.focus(); msgInput.placeholder = 'رد على رسالة...'; }
-function editMessage(id, oldText) {
-    editingMessageId = id;
-    msgInput.value = oldText;
-    msgInput.focus();
-    msgInput.placeholder = 'تعديل الرسالة...';
-}
-function deleteMessage(id) { socket.emit('delete_message', { message_id: id }); }
-
-// --- Socket Events ---
-socket.on('new_message', (msg) => {
-    if (msg.recipient_id && msg.sender_id !== currentUserId) {
-        document.getElementById('private-chat-box').innerHTML += `<div class="message-bubble" style="background:#fff;margin:5px;"><strong>${msg.sender_name}:</strong> ${msg.text||''} ${msg.file_path ? `<br><img src="${msg.file_path}" style="max-width:120px;">` : ''}</div>`;
-    } else if (!msg.recipient_id) {
-        renderMessage(msg);
-    }
-    if (msg.sender_id !== currentUserId) {
-        const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-09.mp3');
-        audio.play().catch(e=>{});
-    }
-});
-socket.on('message_edited', (data) => {
-    const el = document.querySelector(`#msg-${data.message_id} .message-bubble`);
-    if (el) el.innerHTML = data.text + ' <span class="edited-badge">(معدل)</span>';
-});
-socket.on('message_deleted', (data) => {
-    const el = document.getElementById('msg-' + data.message_id);
-    if (el) el.remove();
-});
-socket.on('update_online', (users) => {
-    document.getElementById('online-list').innerHTML = users.map(u => `<div style="cursor:pointer;padding:5px;" onclick="openPrivateChat(${u.id}, '${u.name}')">🟢 ${u.name}</div>`).join('');
-});
-
-// --- Private Chat ---
-function openPrivateChat(userId, userName) {
-    document.getElementById('private-chat-name').textContent = userName;
-    activePrivateRecipient = userId;
-    new bootstrap.Modal(document.getElementById('privateChatModal')).show();
-    loadPrivateMessages(userId);
-}
-function loadPrivateMessages(userId) {
-    fetch('/api/messages').then(r=>r.json()).then(msgs => {
-        const box = document.getElementById('private-chat-box');
-        box.innerHTML = '';
-        msgs.filter(m => (m.sender_id === userId && m.recipient_id === currentUserId) || (m.sender_id === currentUserId && m.recipient_id === userId))
-            .forEach(m => {
-                box.innerHTML += `<div class="message-bubble" style="background:${m.sender_id===currentUserId?'#dcf8c6':'#fff'};margin:5px;padding:8px;border-radius:10px;"><strong>${m.sender_name}:</strong> ${m.text||''}${m.file_path ? `<br><img src="${m.file_path}" style="max-width:150px;">`:''}</div>`;
-            });
-        box.scrollTop = box.scrollHeight;
+    // File
+    document.getElementById('file-btn').addEventListener('click', () => document.getElementById('file-input').click());
+    document.getElementById('file-input').addEventListener('change', function() {
+        const file = this.files[0]; if (!file) return;
+        const fd = new FormData(); fd.append('file', file);
+        fetch('/upload_chat_file', { method: 'POST', body: fd }).then(r=>r.json()).then(d => { if (d.success) this.value = ''; });
     });
-}
-document.getElementById('send-private-btn').addEventListener('click', () => {
-    const text = document.getElementById('private-message-input').value.trim();
-    if (!text || !activePrivateRecipient) return;
-    socket.emit('send_message', { text: text, recipient_id: activePrivateRecipient });
-    document.getElementById('private-message-input').value = '';
-});
 
-// --- Send public message ---
-document.getElementById('send-btn').addEventListener('click', () => {
-    const text = msgInput.value.trim();
-    if (!text) return;
-    const payload = { text: text };
-    if (replyToId) { payload.reply_to = replyToId; replyToId = null; msgInput.placeholder = 'اكتب رسالتك...'; }
-    if (editingMessageId) {
-        socket.emit('edit_message', { message_id: editingMessageId, text: text });
-        editingMessageId = null;
-        msgInput.placeholder = 'اكتب رسالتك...';
-    } else {
-        socket.emit('send_message', payload);
+    // Mention
+    const mentionList = document.getElementById('mention-list');
+    const msgInput = document.getElementById('message-input');
+    msgInput.addEventListener('input', function() {
+        const val = this.value; const lastAt = val.lastIndexOf('@');
+        if (lastAt >= 0 && (lastAt === 0 || val[lastAt-1] === ' ')) {
+            const query = val.substring(lastAt+1).toLowerCase();
+            const filtered = allUsers.filter(u => u.name.toLowerCase().includes(query)).slice(0, 5);
+            mentionList.innerHTML = filtered.map(u => `<div class="mention-item" style="padding:5px;cursor:pointer;" onclick="selectMention(${u.id}, '${u.name}')">${u.name}</div>`).join('');
+            mentionList.style.display = filtered.length ? 'block' : 'none';
+        } else mentionList.style.display = 'none';
+    });
+    function selectMention(id, name) {
+        const val = msgInput.value; const lastAt = val.lastIndexOf('@');
+        msgInput.value = val.substring(0, lastAt) + '@' + name + ' ';
+        mentionList.style.display = 'none'; msgInput.focus();
     }
-    msgInput.value = '';
-});
 
-// --- Load initial data ---
-fetch('/api/users').then(r=>r.json()).then(u => { allUsers = u; });
-fetch('/api/messages').then(r=>r.json()).then(msgs => {
-    document.getElementById('chat-box').innerHTML = '';
-    msgs.filter(m => !m.recipient_id).forEach(m => renderMessage(m));
-});
+    // Render message
+    function renderMessage(msg, boxId = 'chat-box') {
+        const box = document.getElementById(boxId);
+        const isSent = msg.sender_id === currentUserId;
+        const wrapper = document.createElement('div');
+        wrapper.className = `message-wrapper ${isSent ? 'sent' : 'received'}`;
+        wrapper.id = 'msg-' + msg.id;
+        let bubble = '';
+        if (msg.reply_to) {
+            const rel = document.getElementById('msg-' + msg.reply_to);
+            if (rel) bubble += `<div style="font-size:0.75rem;color:#888;border-left:3px solid #ccc;padding-left:5px;margin-bottom:4px;">↩️ ${rel.querySelector('.message-bubble').innerText.substring(0,50)}...</div>`;
+        }
+        if (msg.file_path) bubble += `<img src="${msg.file_path}" style="max-width:200px;border-radius:10px;">`;
+        else { bubble += msg.text; if (msg.edited) bubble += '<span class="edited-badge">(مُعدَّل)</span>'; }
+        wrapper.innerHTML = `
+            <img src="${msg.sender_pic || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(msg.sender_name) + '&background=667eea&color=fff&size=68'}" class="message-avatar">
+            <div class="message-bubble">
+                <div class="message-info"><span class="message-sender">${msg.sender_name}</span><span class="message-time">${msg.timestamp}</span></div>
+                <div class="message-text">${bubble}</div>
+                <div class="message-actions">
+                    <button title="رد" onclick="replyToMessage(${msg.id})">↩️</button>
+                    ${isSent ? `<button title="تعديل" onclick="editMessage(${msg.id}, '${(msg.text||'').replace(/'/g, "\\'")}')">✏️</button>` : ''}
+                    ${isSent || currentUserId === 1 ? `<button title="حذف" onclick="deleteMessage(${msg.id})">🗑️</button>` : ''}
+                </div>
+            </div>`;
+        box.appendChild(wrapper); box.scrollTop = box.scrollHeight;
+    }
+    window.replyToMessage = (id) => { replyToId = id; msgInput.focus(); msgInput.placeholder = 'رد على رسالة...'; };
+    window.editMessage = (id, old) => { editingMessageId = id; msgInput.value = old; msgInput.focus(); msgInput.placeholder = 'تعديل الرسالة...'; };
+    window.deleteMessage = (id) => { socket.emit('delete_message', { message_id: id }); };
+
+    // Socket events
+    socket.on('new_message', (msg) => {
+        if (msg.recipient_id && msg.sender_id !== currentUserId) {
+            const pbox = document.getElementById('private-chat-box');
+            if (pbox) pbox.innerHTML += `<div class="message-bubble" style="background:#fff;margin:5px;"><strong>${msg.sender_name}:</strong> ${msg.text}</div>`;
+        } else if (!msg.recipient_id) renderMessage(msg);
+        if (msg.sender_id !== currentUserId) { new Audio('https://www.soundjay.com/buttons/sounds/button-09.mp3').play().catch(()=>{}); }
+    });
+    socket.on('message_edited', (data) => {
+        const el = document.querySelector(`#msg-${data.message_id} .message-text`);
+        if (el) el.innerHTML = data.text + ' <span class="edited-badge">(مُعدَّل)</span>';
+    });
+    socket.on('message_deleted', (data) => {
+        const el = document.getElementById('msg-' + data.message_id);
+        if (el) el.remove();
+    });
+    socket.on('update_online', (users) => {
+        const ol = document.getElementById('online-list'), ll = document.getElementById('last-seen-list');
+        ol.innerHTML = users.map(u => `<div style="cursor:pointer;padding:5px;" onclick="openPrivateChat(${u.id}, '${u.name}')">🟢 ${u.name}</div>`).join('');
+        ll.innerHTML = users.map(u => `<div>${u.name} - ${u.status} (${u.last_seen})</div>`).join('');
+    });
+
+    // Private chat
+    function openPrivateChat(uid, uname) {
+        document.getElementById('private-chat-name').textContent = uname;
+        activePrivateRecipient = uid;
+        new bootstrap.Modal(document.getElementById('privateChatModal')).show();
+        fetch('/api/messages').then(r=>r.json()).then(msgs => {
+            const box = document.getElementById('private-chat-box'); box.innerHTML = '';
+            msgs.filter(m => (m.sender_id === uid && m.recipient_id === currentUserId) || (m.sender_id === currentUserId && m.recipient_id === uid))
+                .forEach(m => box.innerHTML += `<div class="message-bubble" style="background:${m.sender_id===currentUserId?'#dcf8c6':'#fff'};margin:5px;padding:8px;border-radius:10px;"><strong>${m.sender_name}:</strong> ${m.text||''}${m.file_path?`<br><img src="${m.file_path}" style="max-width:150px;">`:''}</div>`);
+            box.scrollTop = box.scrollHeight;
+        });
+    }
+    document.getElementById('send-private-btn').addEventListener('click', () => {
+        const t = document.getElementById('private-message-input').value.trim();
+        if (t && activePrivateRecipient) { socket.emit('send_message', { text: t, recipient_id: activePrivateRecipient }); document.getElementById('private-message-input').value = ''; }
+    });
+
+    // Send
+    document.getElementById('send-btn').addEventListener('click', () => {
+        const t = msgInput.value.trim(); if (!t) return;
+        const p = { text: t };
+        if (replyToId) { p.reply_to = replyToId; replyToId = null; msgInput.placeholder = 'اكتب رسالتك...'; }
+        if (editingMessageId) { socket.emit('edit_message', { message_id: editingMessageId, text: t }); editingMessageId = null; msgInput.placeholder = 'اكتب رسالتك...'; }
+        else socket.emit('send_message', p);
+        msgInput.value = '';
+    });
+    msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') document.getElementById('send-btn').click(); });
+
+    // Init
+    fetch('/api/users').then(r=>r.json()).then(u => { allUsers = u; });
+    fetch('/api/messages').then(r=>r.json()).then(msgs => {
+        const cb = document.getElementById('chat-box'); cb.innerHTML = '';
+        msgs.filter(m => !m.recipient_id).forEach(m => renderMessage(m));
+        cb.scrollTop = cb.scrollHeight;
+    });
 </script>
 {% endblock %}
