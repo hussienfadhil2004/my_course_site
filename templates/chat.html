@@ -1,16 +1,174 @@
 {% extends "base.html" %}
 {% block content %}
-<h3>الدردشة العامة</h3>
-<div class="card">
-    <div class="card-body" id="chat-box" style="height: 60vh; overflow-y: auto;"></div>
-    <div class="card-footer">
+<div class="chat-container">
+    <div class="chat-header">
+        <h5>💬 المحادثة العامة</h5>
+        <small>جميع الطلاب المتصلين</small>
+    </div>
+    <div class="chat-messages" id="chat-box">
+        <!-- الرسائل ستظهر هنا -->
+    </div>
+    <div class="chat-footer">
         <div class="input-group">
-            <input type="text" id="message-input" class="form-control" placeholder="اكتب رسالة...">
-            <button class="btn btn-primary" id="send-btn">إرسال</button>
+            <input type="text" id="message-input" class="form-control" placeholder="اكتب رسالتك هنا..." autocomplete="off">
+            <button class="btn btn-primary" id="send-btn">
+                <i class="fas fa-paper-plane"></i> إرسال
+            </button>
         </div>
     </div>
 </div>
+
+<style>
+.chat-container {
+    border: 1px solid #ddd;
+    border-radius: 15px;
+    overflow: hidden;
+    background: #f8f9fa;
+    max-width: 800px;
+    margin: 0 auto;
+}
+.chat-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px 20px;
+    text-align: center;
+}
+.chat-header h5 {
+    margin: 0;
+}
+.chat-header small {
+    opacity: 0.9;
+    font-size: 0.8rem;
+}
+.chat-messages {
+    height: 55vh;
+    overflow-y: auto;
+    padding: 20px;
+    background: #e5ddd5;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23f5f0eb" width="100" height="100"/></svg>');
+}
+.chat-footer {
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #ddd;
+}
+.chat-footer .form-control {
+    border-radius: 25px;
+    padding: 10px 20px;
+    border: 1px solid #ddd;
+}
+.chat-footer .btn {
+    border-radius: 25px;
+    padding: 10px 25px;
+    margin-right: 10px;
+}
+/* رسالة */
+.message-wrapper {
+    display: flex;
+    margin-bottom: 15px;
+    align-items: flex-start;
+}
+.message-wrapper.sent {
+    flex-direction: row-reverse;
+}
+.message-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-shrink: 0;
+}
+.message-wrapper.sent .message-avatar {
+    margin-right: 0;
+    margin-left: 10px;
+}
+.message-wrapper.received .message-avatar {
+    margin-right: 10px;
+    margin-left: 0;
+}
+.message-content {
+    max-width: 70%;
+}
+.message-sender-name {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 3px;
+    font-weight: bold;
+}
+.message-wrapper.sent .message-sender-name {
+    text-align: left;
+    color: #28a745;
+}
+.message-wrapper.received .message-sender-name {
+    text-align: right;
+}
+.message-bubble {
+    padding: 10px 15px;
+    border-radius: 18px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    position: relative;
+}
+.message-wrapper.sent .message-bubble {
+    background: #dcf8c6;
+    border-bottom-right-radius: 5px;
+}
+.message-wrapper.received .message-bubble {
+    background: white;
+    border-bottom-left-radius: 5px;
+}
+.message-time {
+    font-size: 0.7rem;
+    color: #999;
+    margin-top: 3px;
+    display: block;
+}
+.message-wrapper.sent .message-time {
+    text-align: left;
+}
+.message-wrapper.received .message-time {
+    text-align: right;
+}
+/* شريط التمرير */
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+.chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chat-messages::-webkit-scrollbar-thumb {
+    background: #bbb;
+    border-radius: 3px;
+}
+/* نظام داكن */
+body.dark-mode .chat-container {
+    background: #1a1a2e;
+    border-color: #333;
+}
+body.dark-mode .chat-messages {
+    background: #0f0f1a;
+}
+body.dark-mode .chat-footer {
+    background: #1a1a2e;
+    border-color: #333;
+}
+body.dark-mode .message-bubble {
+    color: #e0e0e0;
+}
+body.dark-mode .message-wrapper.received .message-bubble {
+    background: #2a2a3c;
+}
+body.dark-mode .chat-footer .form-control {
+    background: #2a2a3c;
+    color: white;
+    border-color: #444;
+}
+</style>
 {% endblock %}
+
 {% block scripts %}
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
@@ -18,44 +176,65 @@ const socket = io();
 const chatBox = document.getElementById('chat-box');
 const msgInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
-const currentUserId = parseInt('{{ current_user.id }}');
+const currentUserId = {{ current_user.id }};
 
-socket.on('new_message', function(msg) {
-    const div = document.createElement('div');
-    if (msg.sender_id === currentUserId) {
-        div.className = 'message sent';
+function formatTime(timestamp) {
+    const now = new Date();
+    const msgDate = new Date();
+    const [h, m] = timestamp.split(':');
+    msgDate.setHours(h, m, 0);
+    let hours = msgDate.getHours();
+    const minutes = msgDate.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'م' : 'ص';
+    hours = hours % 12 || 12;
+    return hours + ':' + minutes + ' ' + ampm;
+}
+
+function addMessage(msg, prepend = false) {
+    const isSent = msg.sender_id === currentUserId;
+    const avatarUrl = msg.sender_pic ? '/static/uploads/' + msg.sender_pic : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(msg.sender_name) + '&background=667eea&color=fff&size=84&font-size=0.4';
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message-wrapper ' + (isSent ? 'sent' : 'received');
+    
+    wrapper.innerHTML = `
+        <img src="${avatarUrl}" class="message-avatar" alt="${msg.sender_name}" onerror="this.src='https://ui-avatars.com/api/?name=User&background=667eea&color=fff&size=84&font-size=0.4'">
+        <div class="message-content">
+            <div class="message-sender-name">${msg.sender_name}</div>
+            <div class="message-bubble">${msg.text}</div>
+            <small class="message-time">${formatTime(msg.timestamp)}</small>
+        </div>
+    `;
+    
+    if (prepend) {
+        chatBox.insertBefore(wrapper, chatBox.firstChild);
     } else {
-        div.className = 'message received';
+        chatBox.appendChild(wrapper);
     }
-    div.innerHTML = '<strong>' + msg.sender_name + '</strong>: ' + msg.text + ' <small>' + msg.timestamp + '</small>';
-    chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
-});
+}
 
 function sendMessage() {
     const text = msgInput.value.trim();
     if (!text) return;
     socket.emit('send_message', { text: text });
     msgInput.value = '';
+    msgInput.focus();
 }
+
+socket.on('new_message', function(msg) {
+    addMessage(msg);
+});
 
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') sendMessage();
 });
 
-fetch('/api/messages').then(function(r) { return r.json(); }).then(function(msgs) {
+// تحميل الرسائل السابقة
+fetch('/api/messages').then(r => r.json()).then(msgs => {
     chatBox.innerHTML = '';
-    msgs.forEach(function(m) {
-        const div = document.createElement('div');
-        if (m.sender_id === currentUserId) {
-            div.className = 'message sent';
-        } else {
-            div.className = 'message received';
-        }
-        div.innerHTML = '<strong>' + m.sender_name + '</strong>: ' + m.text + ' <small>' + m.timestamp + '</small>';
-        chatBox.appendChild(div);
-    });
+    msgs.forEach(m => addMessage(m));
     chatBox.scrollTop = chatBox.scrollHeight;
 });
 </script>

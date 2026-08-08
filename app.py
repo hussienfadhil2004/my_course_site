@@ -22,6 +22,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.remember_cookie_duration = timedelta(days=365)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # ========== النماذج ==========
@@ -373,6 +374,19 @@ def get_arabic_rank(score):
 def index():
     return render_template('index.html')
 
+@app.route('/guest')
+def guest_home():
+    lessons = Lesson.query.order_by(Lesson.order).limit(3).all()
+    return render_template('guest.html', lessons=lessons)
+
+@app.route('/guest/lesson/<int:lesson_id>')
+def guest_lesson(lesson_id):
+    if lesson_id > 3:
+        flash('يجب التسجيل لمشاهدة جميع الدروس', 'warning')
+        return redirect(url_for('guest_home'))
+    lesson = Lesson.query.get_or_404(lesson_id)
+    return render_template('lesson_detail.html', lesson=lesson)
+
 @app.route('/register', methods=['GET','POST'])
 def register():
     if request.method == 'POST':
@@ -390,7 +404,7 @@ def register():
                     password=generate_password_hash(password), student_id=generate_student_id(), status='متصل')
         db.session.add(user)
         db.session.commit()
-        login_user(user)
+        login_user(user, remember=True)
         flash(f'تم التسجيل! المعرف الدراسي: {user.student_id}', 'success')
         return redirect(url_for('profile'))
     return render_template('register.html')
@@ -400,13 +414,16 @@ def login():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
+        remember = True if request.form.get('remember') else False
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
-            login_user(user)
+            login_user(user, remember=remember)
             user.last_seen = datetime.utcnow()
             user.status = 'متصل'
             db.session.commit()
-            return redirect(url_for('index'))
+            flash('تم تسجيل الدخول بنجاح', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
         flash('اسم المستخدم أو كلمة المرور غير صحيحة', 'danger')
     return render_template('login.html')
 
@@ -717,13 +734,34 @@ def handle_message(data):
     msg = Message(sender_id=current_user.id, text=text)
     db.session.add(msg)
     db.session.commit()
-    emit('new_message', {'id':msg.id, 'sender_id':current_user.id, 'sender_name':current_user.full_name if current_user.show_real_name else current_user.username, 'text':msg.text, 'timestamp':msg.timestamp.strftime('%H:%M')}, broadcast=True)
+    sender_name = current_user.full_name if current_user.show_real_name else current_user.username
+    sender_pic = current_user.profile_pic if current_user.profile_pic and current_user.profile_pic != 'default.png' else ''
+    emit('new_message', {
+        'id': msg.id,
+        'sender_id': current_user.id,
+        'sender_name': sender_name,
+        'sender_pic': sender_pic,
+        'text': msg.text,
+        'timestamp': msg.timestamp.strftime('%H:%M')
+    }, broadcast=True)
 
 @app.route('/api/messages')
 @login_required
 def api_messages():
     msgs = Message.query.order_by(Message.timestamp.asc()).all()
-    return jsonify([{'id':m.id,'sender_id':m.sender_id,'sender_name':m.sender.full_name if m.sender.show_real_name else m.sender.username,'text':m.text,'timestamp':m.timestamp.strftime('%H:%M')} for m in msgs])
+    result = []
+    for m in msgs:
+        sender_name = m.sender.full_name if m.sender.show_real_name else m.sender.username
+        sender_pic = m.sender.profile_pic if m.sender.profile_pic and m.sender.profile_pic != 'default.png' else ''
+        result.append({
+            'id': m.id,
+            'sender_id': m.sender_id,
+            'sender_name': sender_name,
+            'sender_pic': sender_pic,
+            'text': m.text,
+            'timestamp': m.timestamp.strftime('%H:%M')
+        })
+    return jsonify(result)
 
 if __name__ == '__main__':
     with app.app_context():
