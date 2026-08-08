@@ -249,6 +249,101 @@ def get_arabic_rank(score):
 def index():
     return render_template('index.html')
 
+@app.route('/register', methods=['GET','POST'])
+def register():
+    if request.method == 'POST':
+        full_name = request.form['full_name'].strip()
+        username = request.form['username'].strip()
+        email_or_phone = request.form['email_or_phone'].strip()
+        password = request.form['password']
+        if User.query.filter_by(username=username).first():
+            flash('اسم المستخدم موجود مسبقاً', 'danger')
+            return redirect(url_for('register'))
+        if User.query.filter_by(email_or_phone=email_or_phone).first():
+            flash('البريد/الهاتف مستخدم مسبقاً', 'danger')
+            return redirect(url_for('register'))
+        user = User(full_name=full_name, username=username, email_or_phone=email_or_phone,
+                    password=generate_password_hash(password), student_id=generate_student_id(), status='متصل')
+        db.session.add(user)
+        db.session.commit()
+        login_user(user, remember=True)
+        flash(f'تم التسجيل! المعرف الدراسي: {user.student_id}', 'success')
+        return redirect(url_for('profile'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username'].strip()
+        password = request.form['password']
+        remember = True if request.form.get('remember') else False
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            if user.banned:
+                flash('تم حظر حسابك. تواصل مع المشرف.', 'danger')
+                return redirect(url_for('login'))
+            login_user(user, remember=remember)
+            user.last_seen = datetime.utcnow()
+            user.status = 'متصل'
+            db.session.commit()
+            flash('تم تسجيل الدخول بنجاح', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        flash('اسم المستخدم أو كلمة المرور غير صحيحة', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    current_user.status = 'غير متصل'
+    current_user.last_seen = datetime.utcnow()
+    db.session.commit()
+    logout_user()
+    return redirect(url_for('index'))
+
+@app.route('/profile', methods=['GET','POST'])
+@login_required
+def profile():
+    achievements = UserAchievement.query.filter_by(user_id=current_user.id).all()
+    if request.method == 'POST':
+        if 'profile_pic' in request.files:
+            file = request.files['profile_pic']
+            if file and file.filename and allowed_file(file.filename):
+                filename = secure_filename(f"{current_user.username}_{file.filename}")
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                current_user.profile_pic = filename
+        current_user.bio = request.form.get('bio','').strip()
+        current_user.telegram_link = request.form.get('telegram','').strip()
+        current_user.whatsapp_link = request.form.get('whatsapp','').strip()
+        current_user.show_real_name = 'show_real_name' in request.form
+        current_user.status = request.form.get('status','متصل')
+        db.session.commit()
+        flash('تم تحديث الملف الشخصي', 'success')
+        return redirect(url_for('profile'))
+    return render_template('profile.html', user=current_user, achievements=achievements)
+
+@app.route('/student/<int:user_id>')
+def public_profile(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.role == 'admin':
+        flash('لا يمكن عرض ملف المشرف', 'warning')
+        return redirect(url_for('students'))
+    achievements = UserAchievement.query.filter_by(user_id=user.id).all()
+    return render_template('public_profile.html', user=user, achievements=achievements)
+
+@app.route('/guest')
+def guest_home():
+    lessons = Lesson.query.order_by(Lesson.order).limit(3).all()
+    return render_template('guest.html', lessons=lessons)
+
+@app.route('/guest/lesson/<int:lesson_id>')
+def guest_lesson(lesson_id):
+    if lesson_id > 3:
+        flash('يجب التسجيل لمشاهدة جميع الدروس', 'warning')
+        return redirect(url_for('guest_home'))
+    lesson = Lesson.query.get_or_404(lesson_id)
+    return render_template('lesson_detail.html', lesson=lesson)
+
 @app.route('/students')
 @login_required
 def students():
@@ -372,7 +467,6 @@ def admin_dashboard():
 @app.route('/admin/reset_db')
 @admin_required
 def admin_reset_db():
-    """إعادة إنشاء جميع الجداول والبيانات الافتراضية"""
     try:
         db.drop_all()
         db.create_all()
