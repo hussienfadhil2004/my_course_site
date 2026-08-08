@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="text-align: center; padding: 50px;">
+    <h1 style="color: #2563eb;">مرحباً بك في دورة تعلم الحاسوب</h1>
+    <p style="font-size: 1.2rem; color: #555;">تعلم أساسيات الحاسوب، مايكروسوفت أوفيس، وغيرها من المهارات</p>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 40px;">
+        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3>💻 أساسيات الحاسوب</h3>
+            <p>تعرف على مكونات الحاسوب وأنظمة التشغيل</p>
+        </div>
+        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3>📊 مايكروسوفت أوفيس</h3>
+            <p>تعلم وورد، إكسل، وباور بوينت</p>
+        </div>
+        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3>📝 اختبارات تفاعلية</h3>
+            <p>اختبر معرفتك واحصل على النتائج فوراً</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

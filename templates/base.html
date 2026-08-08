@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}دورة تعلم الحاسوب{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{{ url_for('index') }}" class="nav-brand">🏫 تعلم الحاسوب</a>
+            <div class="nav-links">
+                <a href="{{ url_for('lessons') }}" class="nav-link"><i class="fas fa-book"></i> الدروس</a>
+                <a href="{{ url_for('office') }}" class="nav-link"><i class="fas fa-file-alt"></i> أوفيس</a>
+                <a href="{{ url_for('exam', exam_index=0) }}" class="nav-link"><i class="fas fa-question-circle"></i> اختبارات</a>
+                <a href="{{ url_for('results') }}" class="nav-link"><i class="fas fa-chart-bar"></i> نتائجي</a>
+                <a href="{{ url_for('chat') }}" class="nav-link"><i class="fas fa-comments"></i> دردشة</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('profile') }}" class="nav-link"><i class="fas fa-user"></i> {{ current_user.username }}</a>
+                    <a href="{{ url_for('logout') }}" class="nav-link"><i class="fas fa-sign-out-alt"></i> خروج</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="nav-link"><i class="fas fa-sign-in-alt"></i> دخول</a>
+                    <a href="{{ url_for('register') }}" class="nav-link"><i class="fas fa-user-plus"></i> تسجيل</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول{% endblock %}
+{% block content %}
+<div class="auth-container">
+    <h2><i class="fas fa-sign-in-alt"></i> تسجيل الدخول</h2>
+    <form method="POST" class="auth-form">
+        <div class="form-group">
+            <label><i class="fas fa-user"></i> اسم المستخدم</label>
+            <input type="text" name="username" required placeholder="أدخل اسم المستخدم">
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-lock"></i> كلمة المرور</label>
+            <input type="password" name="password" required placeholder="أدخل كلمة المرور">
+        </div>
+        <button type="submit" class="btn btn-primary">دخول</button>
+        <p class="mt-3">ليس لديك حساب؟ <a href="{{ url_for('register') }}">سجل الآن</a></p>
+    </form>
+</div>
+{% endblock %}

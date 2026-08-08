@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}الدردشة الجماعية{% endblock %}
+{% block content %}
+<div class="chat-container">
+    <h2><i class="fas fa-comments"></i> الدردشة الجماعية</h2>
+    <div id="chat-messages" class="chat-messages">
+        {% for message in messages %}
+        <div class="message">
+            <strong>{{ message.sender.full_name }}</strong>
+            <span class="text-muted">(@{{ message.sender.username }})</span>
+            <span class="timestamp">{{ message.created_at.strftime('%H:%M') }}</span>
+            <p>{{ message.content }}</p>
+        </div>
+        {% endfor %}
+        <div id="typing-indicator" class="typing-indicator"></div>
+    </div>
+    
+    <div class="chat-input-area">
+        <input type="text" id="chat-input" class="chat-input" placeholder="اكتب رسالتك..." onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button class="btn btn-primary" onclick="sendMessage()"><i class="fas fa-paper-plane"></i> إرسال</button>
+    </div>
+</div>
+
+<script>
+    let socket;
+
+    function initChat() {
+        socket = io();
+        
+        socket.on('new_message', function(data) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `
+                <strong>${data.user}</strong>
+                <span class="text-muted">(@${data.username})</span>
+                <span class="timestamp">${data.timestamp}</span>
+                <p>${data.content}</p>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+
+        socket.on('typing', function(data) {
+            const indicator = document.getElementById('typing-indicator');
+            indicator.textContent = `${data.username} يكتب...`;
+            clearTimeout(indicator.timeout);
+            indicator.timeout = setTimeout(() => {
+                indicator.textContent = '';
+            }, 3000);
+        });
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const content = input.value.trim();
+        if (content) {
+            socket.emit('send_message', { content: content });
+            input.value = '';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (document.getElementById('chat-messages')) {
+            initChat();
+        }
+    });
+</script>
+{% endblock %}

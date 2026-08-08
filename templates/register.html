@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}إنشاء حساب{% endblock %}
+{% block content %}
+<div class="auth-container">
+    <h2><i class="fas fa-user-plus"></i> إنشاء حساب جديد</h2>
+    <form method="POST" class="auth-form">
+        <div class="form-group">
+            <label><i class="fas fa-user"></i> اسم المستخدم (للظهور)</label>
+            <input type="text" name="username" required placeholder="اختر اسم مستخدم فريد">
+            <small>سيظهر هذا الاسم للآخرين في الدردشة</small>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-id-card"></i> الاسم الثلاثي (الحقيقي)</label>
+            <input type="text" name="full_name" required placeholder="أدخل اسمك الثلاثي">
+            <small>فقط الإدارة سترى هذا الاسم</small>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-envelope"></i> البريد الإلكتروني</label>
+            <input type="email" name="email" placeholder="أدخل البريد الإلكتروني (اختياري)">
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-phone"></i> رقم الهاتف</label>
+            <input type="text" name="phone" placeholder="أدخل رقم الهاتف (اختياري)">
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-lock"></i> كلمة المرور</label>
+            <input type="password" name="password" required placeholder="أدخل كلمة مرور قوية">
+        </div>
+        <button type="submit" class="btn btn-primary">إنشاء حساب</button>
+        <p class="mt-3">لديك حساب؟ <a href="{{ url_for('login') }}">سجل دخولك</a></p>
+    </form>
+</div>
+{% endblock %}

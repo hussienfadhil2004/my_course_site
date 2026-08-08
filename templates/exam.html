@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.title }}{% endblock %}
+
+{% block content %}
+<div class="exam-container" 
+     data-duration="{{ exam.duration }}" 
+     data-exam-index="{{ exam.index }}"
+     data-questions='{{ exam.questions|tojson }}'>
+    
+    <div class="exam-header">
+        <h2>{{ exam.title }}</h2>
+        <p>{{ exam.description }}</p>
+        <div id="exam-timer" class="exam-timer">
+            الوقت المتبقي: {{ exam.duration }} دقيقة
+        </div>
+    </div>
+    
+    <form id="exam-form">
+        <div class="questions-container">
+            {% for question in exam.questions %}
+                <div class="question-item" data-question-index="{{ loop.index0 }}">
+                    <h4>{{ loop.index }}. {{ question.question }}</h4>
+                    <div class="options">
+                        {% for option in question.options %}
+                            <label class="option">
+                                <input type="radio" 
+                                       name="q{{ loop.parent.loop.index0 }}" 
+                                       value="{{ loop.index0 }}">
+                                {{ option }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <button type="button" id="submit-btn" class="btn btn-primary btn-large">
+            <i class="fas fa-check"></i> إنهاء الاختبار
+        </button>
+    </form>
+    
+    <div id="exam-results" style="display: none; margin-top: 2rem;"></div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const examContainer = document.querySelector('.exam-container');
+        if (!examContainer) return;
+        
+        const duration = parseInt(examContainer.dataset.duration) || 30;
+        const examIndex = parseInt(examContainer.dataset.examIndex) || 0;
+        let questions = [];
+        
+        try {
+            questions = JSON.parse(examContainer.dataset.questions);
+        } catch (e) {
+            console.error('خطأ في قراءة أسئلة الاختبار:', e);
+            questions = [];
+        }
+        
+        if (questions.length > 0) {
+            startExam(duration, examIndex, questions);
+        }
+    });
+
+    // ====== وظائف الاختبار ======
+    let examTimer;
+    let examAnswers = {};
+    let examDuration;
+    let examIndex;
+    let examQuestions;
+
+    function startExam(duration, index, questions) {
+        examDuration = duration;
+        examIndex = index;
+        examQuestions = questions;
+        
+        let seconds = duration * 60;
+        updateTimer(seconds);
+        
+        examTimer = setInterval(() => {
+            seconds--;
+            updateTimer(seconds);
+            if (seconds <= 0) {
+                clearInterval(examTimer);
+                submitExam();
+            }
+        }, 1000);
+        
+        document.querySelectorAll('.question-item .option input[type="radio"]').forEach(input => {
+            input.addEventListener('change', function() {
+                const questionItem = this.closest('.question-item');
+                const questionIndex = parseInt(questionItem.dataset.questionIndex);
+                const optionIndex = parseInt(this.value);
+                selectAnswer(questionIndex, optionIndex);
+            });
+        });
+    }
+
+    function updateTimer(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        const timerDisplay = document.getElementById('exam-timer');
+        if (timerDisplay) {
+            timerDisplay.textContent = `الوقت المتبقي: ${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    function selectAnswer(questionIndex, optionIndex) {
+        examAnswers[questionIndex] = optionIndex;
+    }
+
+    function submitExam() {
+        clearInterval(examTimer);
+        document.getElementById('submit-btn').disabled = true;
+        
+        const form = document.getElementById('exam-form');
+        const formData = new FormData(form);
+        
+        for (let [key, value] of formData.entries()) {
+            const questionIndex = parseInt(key.replace('q', ''));
+            const optionIndex = parseInt(value);
+            examAnswers[questionIndex] = optionIndex;
+        }
+        
+        fetch(`/submit_exam/${examIndex}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ answers: examAnswers })
+        })
+        .then(response => response.json())
+        .then(data => {
+            displayResults(data);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('حدث خطأ أثناء إرسال الاختبار.');
+            document.getElementById('submit-btn').disabled = false;
+        });
+    }
+
+    function displayResults(data) {
+        const resultsContainer = document.getElementById('exam-results');
+        resultsContainer.style.display = 'block';
+        
+        let answersHtml = '';
+        if (data.correct_answers) {
+            answersHtml = data.correct_answers.map((answer, index) => {
+                const isCorrect = answer.is_correct;
+                return `
+                    <div class="answer-item ${isCorrect ? 'correct' : 'incorrect'}" 
+                         style="padding: 10px; margin: 5px 0; border-radius: 5px; ${isCorrect ? 'background: #dcfce7;' : 'background: #fee2e2;'}">
+                        <p><strong>سؤال ${index + 1}:</strong> ${isCorrect ? '✅ صحيح' : '❌ خطأ'}</p>
+                        <p>إجابتك: ${answer.user_answer !== undefined && answer.user_answer !== null ? answer.user_answer + 1 : 'لم تبدأ'}</p>
+                        <p>الإجابة الصحيحة: ${answer.correct + 1}</p>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        resultsContainer.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                <h3 style="color: #2563eb;">نتيجة الاختبار</h3>
+                <div style="font-size: 2rem; font-weight: bold; color: #2563eb; text-align: center; padding: 20px;">
+                    ${data.score} / ${data.total}
+                    <br>
+                    <span style="font-size: 1.5rem;">النسبة: ${data.percentage}%</span>
+                </div>
+                <div style="margin-top: 20px;">
+                    ${answersHtml}
+                </div>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}
