@@ -36,7 +36,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 online_users = {}
 
-# ========== النماذج (كما هي دون تغيير) ==========
+# ========== النماذج ==========
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.String(10), unique=True, nullable=False)
@@ -177,7 +177,6 @@ def seed_database():
         if not Lesson.query.filter_by(order=order).first():
             db.session.add(Lesson(title=title, content=content, order=order))
 
-    # ✅ 30 سؤالاً فريداً
     questions = [
         ('ما المكون المسؤول عن معالجة البيانات؟', 'mcq', 'المعالج', 'الذاكرة', 'القرص الصلب', 'الشاشة', 'a'),
         ('أي مما يلي وحدة إدخال؟', 'mcq', 'الشاشة', 'الطابعة', 'الفأرة', 'السماعات', 'c'),
@@ -227,7 +226,7 @@ def seed_database():
             db.session.add(Achievement(name=name, description=desc, icon=icon, condition_type=ctype, condition_value=cval))
     db.session.commit()
 
-# ---------- المسارات (كما هي في آخر نسخة صحيحة) ----------
+# ---------- تسجيل ----------
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -245,6 +244,7 @@ def get_arabic_rank(score):
     elif score >= 70: return 'متوسط'
     return 'مبتدئ'
 
+# ---------- المسارات الأساسية ----------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -350,7 +350,7 @@ def statistics():
 def chat():
     return render_template('chat.html')
 
-# ---------- لوحة التحكم (نفس النسخة السابقة) ----------
+# ---------- لوحة التحكم ----------
 def admin_required(f):
     from functools import wraps
     @wraps(f)
@@ -369,7 +369,18 @@ def admin_dashboard():
     avg_score = db.session.query(db.func.avg(TestResult.score)).scalar() or 0
     return render_template('admin/dashboard.html', user_count=user_count, lesson_count=lesson_count, test_count=test_count, avg_score=avg_score)
 
-# ... (باقي مسارات admin كما في آخر إصدار – لن أكررها هنا لأنها موجودة في كودك)
+@app.route('/admin/reset_db')
+@admin_required
+def admin_reset_db():
+    """إعادة إنشاء جميع الجداول والبيانات الافتراضية"""
+    try:
+        db.drop_all()
+        db.create_all()
+        seed_database()
+        flash('✅ تم إعادة تعيين قاعدة البيانات بنجاح. تم إنشاء حساب المشرف الافتراضي.', 'success')
+    except Exception as e:
+        flash(f'❌ حدث خطأ أثناء إعادة التعيين: {str(e)}', 'danger')
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/users')
 @admin_required
