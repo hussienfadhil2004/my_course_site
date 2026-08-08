@@ -1,23 +1,84 @@
 {% extends "admin/admin_base.html" %}
 {% block admin_content %}
-<h3>مكتبة الموارد</h3>
-<form method="POST" action="/admin/resource/add" enctype="multipart/form-data" class="mb-4">
-    <input name="title" class="form-control mb-2" placeholder="العنوان" required>
-    <select name="type" class="form-control mb-2">
-        <option value="pdf">PDF</option>
-        <option value="video">فيديو</option>
-        <option value="link">رابط</option>
-    </select>
-    <input type="file" name="file" class="form-control mb-2">
-    <input name="url" class="form-control mb-2" placeholder="أو رابط خارجي">
-    <button class="btn btn-primary">إضافة</button>
+<h3>📚 مكتبة الموارد</h3>
+
+<!-- نموذج إضافة مورد -->
+<form method="POST" action="/admin/resource/add" enctype="multipart/form-data" class="mb-4 p-3 border bg-light">
+    <h5>➕ إضافة مورد جديد</h5>
+    <div class="mb-3">
+        <label>العنوان</label>
+        <input name="title" class="form-control" placeholder="عنوان المورد" required>
+    </div>
+    <div class="mb-3">
+        <label>نوع المورد</label>
+        <select name="type" class="form-control" id="resource-type" onchange="toggleFileInput()">
+            <option value="pdf">📄 ملف PDF</option>
+            <option value="video">🎬 فيديو</option>
+            <option value="link">🔗 رابط خارجي</option>
+        </select>
+    </div>
+    <div class="mb-3" id="file-upload-area">
+        <label>رفع ملف</label>
+        <input type="file" name="file" class="form-control">
+    </div>
+    <div class="mb-3" id="url-input-area" style="display:none;">
+        <label>أو رابط خارجي</label>
+        <input name="url" class="form-control" placeholder="https://...">
+    </div>
+    <button class="btn btn-primary">إضافة المورد</button>
 </form>
-<ul class="list-group">
-{% for r in resources %}
-    <li class="list-group-item d-flex justify-content-between">
-        {{ r.title }} ({{ r.type }})
-        <a href="/admin/resource/delete/{{ r.id }}" class="btn btn-sm btn-danger">حذف</a>
-    </li>
-{% endfor %}
-</ul>
+
+<!-- جدول الموارد -->
+{% if resources %}
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>العنوان</th>
+            <th>النوع</th>
+            <th>التاريخ</th>
+            <th>إجراءات</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in resources %}
+    <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.title }}</td>
+        <td>
+            {% if r.type == 'pdf' %}
+                <span class="badge bg-danger">📄 PDF</span>
+            {% elif r.type == 'video' %}
+                <span class="badge bg-warning">🎬 فيديو</span>
+            {% else %}
+                <span class="badge bg-info">🔗 رابط</span>
+            {% endif %}
+        </td>
+        <td>{{ r.uploaded_at.strftime('%Y-%m-%d') if r.uploaded_at else '—' }}</td>
+        <td>
+            <a href="{{ r.url }}" target="_blank" class="btn btn-sm btn-primary">🔍 عرض</a>
+            <a href="/admin/resource/delete/{{ r.id }}" class="btn btn-sm btn-danger" onclick="return confirm('متأكد من حذف هذا المورد؟')">🗑️ حذف</a>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">لا توجد موارد مضافة بعد.</p>
+{% endif %}
+
+<script>
+function toggleFileInput() {
+    const type = document.getElementById('resource-type').value;
+    const fileArea = document.getElementById('file-upload-area');
+    const urlArea = document.getElementById('url-input-area');
+    if (type === 'link') {
+        fileArea.style.display = 'none';
+        urlArea.style.display = 'block';
+    } else {
+        fileArea.style.display = 'block';
+        urlArea.style.display = 'none';
+    }
+}
+</script>
 {% endblock %}

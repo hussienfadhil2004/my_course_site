@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📢 الإعلانات</h2>
+{% for ann in announcements %}
+<div class="card mb-3">
+    <div class="card-header">{{ ann.title }}</div>
+    <div class="card-body">{{ ann.content }}</div>
+    <div class="card-footer text-muted">{{ ann.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+</div>
+{% endfor %}
+{% endblock %}

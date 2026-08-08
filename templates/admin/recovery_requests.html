@@ -1,11 +1,40 @@
 {% extends "admin/admin_base.html" %}
 {% block admin_content %}
-<h3>طلبات الاستعادة</h3>
-<ul>
-{% for r in requests %}
-<li>{{ r.contact }} ({{ r.type }}) 
-    <form method="POST" action="/admin/recovery/resolve/{{ r.id }}" style="display:inline"><button class="btn btn-sm btn-success">حل</button></form>
-</li>
-{% endfor %}
-</ul>
+<h3>🔐 طلبات الاستعادة</h3>
+{% if requests %}
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>نوع الطلب</th>
+            <th>جهة الاتصال</th>
+            <th>التاريخ</th>
+            <th>إجراء</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for req in requests %}
+    <tr>
+        <td>{{ req.id }}</td>
+        <td>
+            {% if req.type == 'username' %}
+                <span class="badge bg-info">استعادة اسم المستخدم</span>
+            {% else %}
+                <span class="badge bg-warning">استعادة كلمة المرور</span>
+            {% endif %}
+        </td>
+        <td>{{ req.contact }}</td>
+        <td>{{ req.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+            <form method="POST" action="/admin/recovery/resolve/{{ req.id }}" style="display:inline">
+                <button class="btn btn-sm btn-success">✅ حل الطلب</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">لا توجد طلبات استعادة معلقة حالياً.</p>
+{% endif %}
 {% endblock %}

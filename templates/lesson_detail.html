@@ -2,6 +2,18 @@
 {% block content %}
 <h2>{{ lesson.title }}</h2>
 <hr>
-<div style="white-space: pre-wrap; line-height: 2;">{{ lesson.content }}</div>
-<a href="/lessons" class="btn btn-secondary mt-3">← العودة للدروس</a>
+<div style="white-space: pre-wrap; line-height: 2; font-size: 1.1rem;">{{ lesson.content }}</div>
+<div class="mt-4 d-flex justify-content-between">
+    {% if prev %}
+    <a href="/lesson/{{ prev.id }}" class="btn btn-outline-primary">← الدرس السابق: {{ prev.title }}</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+    {% if next %}
+    <a href="/lesson/{{ next.id }}" class="btn btn-primary">الدرس التالي: {{ next.title }} →</a>
+    {% else %}
+    <a href="/test" class="btn btn-success">✅ إنهاء الدورة - ابدأ الاختبار</a>
+    {% endif %}
+</div>
+<a href="/lessons" class="btn btn-secondary mt-3">العودة للدروس</a>
 {% endblock %}

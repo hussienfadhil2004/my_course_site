@@ -1,25 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>إحصائياتي</h2>
-<p>الدروس المكتملة: <span id="completed-text">{{ completed }}</span> / <span id="total-text">{{ total_lessons }}</span></p>
-<div class="progress">
-    <div id="lesson-bar" class="progress-bar" role="progressbar"></div>
+<h2>📊 إحصائياتي</h2>
+<div class="row">
+  <div class="col-md-6">
+    <div class="card p-3 mb-3">
+      <h5>الدروس المكتملة</h5>
+      <p class="display-4">{{ completed }} / {{ total_lessons }}</p>
+      <div class="progress" style="height: 25px;">
+        <div class="progress-bar bg-success" style="width: {{ progress_percent }}%;">
+          {{ progress_percent }}%
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 mb-3">
+      <h5>متوسط درجات الاختبارات</h5>
+      <p class="display-4">{{ avg_score }}%</p>
+    </div>
+  </div>
 </div>
-<p class="mt-2">النسبة: <span id="percent-text"></span></p>
-<p>متوسط درجات الاختبارات: {{ avg_score }}%</p>
-<p>ترتيبك: {% if rank %}#{{ rank }}{% else %}غير متوفر{% endif %}</p>
-<h5>آخر النتائج</h5>
-<ul>
-{% for r in last_results %}
-    <li>{{ r.timestamp.strftime('%Y-%m-%d') }}: {{ r.score }}%</li>
-{% endfor %}
-</ul>
-<a href="/certificate" class="btn btn-success">تحميل الشهادة</a>
-<script>
-    var bar = document.getElementById('lesson-bar');
-    var percent = parseFloat('{{ progress_percent }}');
-    bar.style.width = percent + '%';
-    bar.textContent = percent + '%';
-    document.getElementById('percent-text').textContent = percent + '%';
-</script>
+
+<div class="card p-3 mb-3">
+  <h5>ترتيبك بين الطلاب</h5>
+  {% if rank %}
+    <p class="display-4">#{{ rank }}</p>
+  {% else %}
+    <p>لا يوجد ترتيب بعد (قم بإنهاء الاختبارات أولاً).</p>
+  {% endif %}
+</div>
+
+<div class="card p-3 mb-3">
+  <h5>آخر نتائج الاختبارات</h5>
+  {% if last_results %}
+  <ul class="list-group">
+    {% for r in last_results %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      {{ r.timestamp.strftime('%Y-%m-%d %H:%M') }}
+      <span class="badge bg-primary rounded-pill">{{ r.score }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p>لا توجد نتائج بعد.</p>
+  {% endif %}
+</div>
+
+<a href="/certificate" class="btn btn-success">📜 تحميل الشهادة</a>
 {% endblock %}

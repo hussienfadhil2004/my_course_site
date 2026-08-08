@@ -1,8 +1,22 @@
 {% extends "admin/admin_base.html" %}
 {% block admin_content %}
-<h3>إرسال إشعار جماعي</h3>
-<form method="POST" action="/admin/send-notification">
-    <textarea name="message" class="form-control mb-2" rows="4" placeholder="نص الإشعار"></textarea>
-    <button class="btn btn-warning">إرسال لجميع الطلاب</button>
+<h3>📢 إرسال إشعار جماعي</h3>
+
+<form method="POST" action="/admin/notifications" class="mb-4 p-3 border bg-light">
+    <div class="mb-3">
+        <label>نص الإشعار</label>
+        <textarea name="message" class="form-control" rows="5" placeholder="اكتب الإشعار الذي تريد إرساله لجميع الطلاب..." required></textarea>
+    </div>
+    <button type="submit" class="btn btn-warning">📤 إرسال الإشعار لجميع الطلاب</button>
 </form>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<p class="text-muted">ملاحظة: سيظهر الإشعار للطلاب عند دخولهم إلى الموقع.</p>
 {% endblock %}

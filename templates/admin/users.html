@@ -1,10 +1,43 @@
 {% extends "admin/admin_base.html" %}
 {% block admin_content %}
-<h3>المستخدمين</h3>
-<table class="table">
-<tr><th>المعرف</th><th>الاسم</th><th>الدور</th><th>آخر ظهور</th></tr>
-{% for u in users %}
-<tr><td>{{ u.student_id }}</td><td>{{ u.full_name }}</td><td>{{ u.role }}</td><td>{{ u.last_seen }}</td></tr>
-{% endfor %}
+<h3>👥 المستخدمين</h3>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>المعرف</th>
+            <th>الاسم الكامل</th>
+            <th>اسم المستخدم</th>
+            <th>البريد / الهاتف</th>
+            <th>الدور</th>
+            <th>الحالة</th>
+            <th>آخر ظهور</th>
+            <th>إجراءات</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+        <td>{{ u.student_id }}</td>
+        <td>{{ u.full_name }}</td>
+        <td>{{ u.username }}</td>
+        <td><small>{{ u.email_or_phone }}</small></td>
+        <td><span class="badge bg-{{ 'success' if u.role == 'admin' else 'primary' }}">{{ u.role }}</span></td>
+        <td>
+            {% if u.banned %}
+                <span class="badge bg-danger">محظور</span>
+            {% else %}
+                <span class="badge bg-success">نشط</span>
+            {% endif %}
+        </td>
+        <td>{{ u.last_seen.strftime('%Y-%m-%d %H:%M') if u.last_seen else '—' }}</td>
+        <td>
+            <a href="/student/{{ u.id }}" class="btn btn-sm btn-info">👤</a>
+            <a href="/admin/ban/{{ u.id }}" class="btn btn-sm btn-{{ 'warning' if not u.banned else 'secondary' }}">
+                {{ '🚫 حظر' if not u.banned else '✅ فك الحظر' }}
+            </a>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
 </table>
 {% endblock %}

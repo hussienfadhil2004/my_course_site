@@ -1,10 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>الطلاب</h2>
+<h2>👥 الطلاب</h2>
 <div class="row">
 {% for student in users %}
     <div class="col-md-2 text-center mb-3">
-        <a href="/student/{{ student.id }}"><img src="{{ url_for('static', filename='uploads/'+student.profile_pic) }}" class="rounded-circle" width="60"><p>{% if student.show_real_name %}{{ student.full_name }}{% else %}{{ student.username }}{% endif %}</p></a>
+        <a href="/student/{{ student.id }}" class="text-decoration-none">
+            <img src="{{ url_for('static', filename='uploads/' + student.profile_pic) if student.profile_pic != 'default.png' else 'https://ui-avatars.com/api/?name=' + student.full_name + '&background=667eea&color=fff&size=80' }}"
+                 class="rounded-circle mb-2"
+                 width="70" height="70"
+                 style="object-fit: cover;"
+                 onerror="this.src='https://ui-avatars.com/api/?name={{ student.full_name }}&background=667eea&color=fff&size=80'">
+            <p class="small">{% if student.show_real_name %}{{ student.full_name }}{% else %}{{ student.username }}{% endif %}</p>
+        </a>
     </div>
 {% endfor %}
 </div>

@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>الدروس ({{ lessons|length }})</h2>
+<h2>📚 الدروس ({{ lessons|length }})</h2>
 <div class="row">
 {% for lesson in lessons %}
     <div class="col-md-4 mb-3">
         <div class="card h-100">
             <div class="card-body">
                 <h5>{{ lesson.order }}. {{ lesson.title }}</h5>
-                <p>{{ lesson.content[:100] }}...</p>
+                <p>{{ lesson.content[:200] }}{% if lesson.content|length > 200 %}...{% endif %}</p>
                 <a href="/lesson/{{ lesson.id }}" class="btn btn-outline-primary">فتح الدرس</a>
-                {% if lesson.id in completed %}<span class="badge bg-success">✓ مكتمل</span>{% endif %}
+                {% if lesson.id in completed %}<span class="badge bg-success float-end">✓ مكتمل</span>{% endif %}
             </div>
         </div>
     </div>

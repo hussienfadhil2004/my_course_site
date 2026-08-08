@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>🏆 لوحة الشرف – أفضل 10 طلاب</h2>
+<table class="table table-striped">
+<tr><th>#</th><th>الطالب</th><th>المستوى</th><th>متوسط الدرجات</th></tr>
+{% for u, avg in top_users %}
+<tr>
+    <td>{{ loop.index }}</td>
+    <td><img src="{{ url_for('static', filename='uploads/'+u.profile_pic) }}" class="rounded-circle" width="40"> {{ u.full_name }}</td>
+    <td>{{ u.level }}</td>
+    <td>{{ avg|round(1) }}%</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

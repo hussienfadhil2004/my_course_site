@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📝 مراجعة الاختبار</h2>
+<p>النتيجة: {{ result.score|round(1) }}%</p>
+{% for item in questions %}
+<div class="card mb-3">
+    <div class="card-body">
+        <p><strong>س {{ loop.index }}:</strong> {{ item.question.question_text }}</p>
+        {% if item.question.question_type == 'mcq' %}
+            <p>أ) {{ item.question.option_a }}</p>
+            <p>ب) {{ item.question.option_b }}</p>
+            <p>ج) {{ item.question.option_c }}</p>
+            <p>د) {{ item.question.option_d }}</p>
+        {% else %}
+            <p>صح ✅ / خطأ ❌</p>
+        {% endif %}
+        <p>إجابتك: <span class="badge bg-{{ 'success' if item.correct else 'danger' }}">{{ item.user_answer }}</span></p>
+        <p>الإجابة الصحيحة: <span class="badge bg-success">{{ item.question.correct_answer }}</span></p>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

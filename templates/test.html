@@ -2,11 +2,23 @@
 {% block content %}
 <h3>سؤال {{ index }} من {{ total }}</h3>
 <p>{{ question.question_text }}</p>
+
 <form method="POST" action="/test/answer">
+    {% if question.question_type == 'tf' %}
+    <div class="form-check">
+        <input class="form-check-input" type="radio" name="answer" value="t" id="ans_t" required>
+        <label class="form-check-label" for="ans_t">✅ صح</label>
+    </div>
+    <div class="form-check">
+        <input class="form-check-input" type="radio" name="answer" value="f" id="ans_f">
+        <label class="form-check-label" for="ans_f">❌ خطأ</label>
+    </div>
+    {% else %}
     <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="a" id="a" required><label class="form-check-label" for="a">{{ question.option_a }}</label></div>
     <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="b" id="b"><label class="form-check-label" for="b">{{ question.option_b }}</label></div>
     <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="c" id="c"><label class="form-check-label" for="c">{{ question.option_c }}</label></div>
     <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="d" id="d"><label class="form-check-label" for="d">{{ question.option_d }}</label></div>
+    {% endif %}
     <button class="btn btn-primary mt-2">التالي ←</button>
 </form>
 {% endblock %}

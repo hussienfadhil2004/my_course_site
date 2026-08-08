@@ -7,9 +7,7 @@
     <a href="/register" class="btn btn-light btn-lg me-2">🚀 ابدأ الآن مجاناً</a>
     <a href="/guest" class="btn btn-outline-light btn-lg">👀 تصفح كضيف</a>
     {% else %}
-    <a href="/lessons" class="btn btn-light btn-lg me-2">📚 الدروس</a>
-    <a href="/test" class="btn btn-outline-light btn-lg me-2">📝 اختبار</a>
-    <a href="/chat" class="btn btn-outline-light btn-lg">💬 المحادثة</a>
+    <a href="/lessons" class="btn btn-light btn-lg">📚 استكمل التعلم</a>
     {% endif %}
 </div>
 
@@ -52,7 +50,7 @@
     <div class="row">
     {% for student in top_students %}
     <div class="col-md-4 text-center">
-        <img src="{{ url_for('static', filename='uploads/'+student.profile_pic) }}" class="rounded-circle" width="80" onerror="this.src='https://ui-avatars.com/api/?name={{ student.full_name }}&background=667eea&color=fff&size=80'">
+        <img src="{{ url_for('static', filename='uploads/'+student.profile_pic) }}" class="rounded-circle" width="80">
         <h5>{{ student.full_name }}</h5>
         <small>{{ student.level }}</small>
     </div>
