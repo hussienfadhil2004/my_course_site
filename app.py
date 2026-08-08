@@ -728,5 +728,6 @@ def api_messages():
 if __name__ == '__main__':
     with app.app_context():
         seed_database()
-    print("✅ الموقع يعمل على: http://127.0.0.1:5000")
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"✅ الموقع يعمل على المنفذ: {port}")
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
