@@ -626,11 +626,20 @@ def lesson_detail(lesson_id):
     return render_template('lesson_detail.html', lesson=lesson, prev_lesson=prev_lesson, next_lesson=next_lesson,
                          is_completed=is_completed, questions=questions, category=lesson.category)
 
-# ==================== دالة إكمال الدرس المطورة ====================
+# ==================== دالة إكمال الدرس المطورة (مع تنظيف السجلات التالفة) ====================
 @app.route('/complete_lesson/<int:lesson_id>', methods=['POST'])
 @login_required
 def complete_lesson(lesson_id):
     try:
+        # 0. تنظيف السجلات التالفة (مرة واحدة لكل طلب - حل مؤقت)
+        # حذف أي سجل في lesson_progress يشير إلى درس غير موجود
+        orphan_count = db.session.query(LessonProgress).filter(
+            ~LessonProgress.lesson_id.in_(db.session.query(Lesson.id))
+        ).delete(synchronize_session=False)
+        if orphan_count > 0:
+            db.session.commit()
+            print(f"🧹 تم حذف {orphan_count} سجل(ات) تالفة من lesson_progress.")
+
         # 1. التحقق من وجود الدرس في قاعدة البيانات أولاً
         lesson = Lesson.query.get(lesson_id)
         if not lesson:
