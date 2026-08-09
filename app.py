@@ -902,17 +902,18 @@ def admin_delete_user(user_id):
             flash('⚠️ لا يمكنك حذف مسؤول آخر.', 'danger')
             return redirect(url_for('admin_users'))
 
-        # 2. إذا كنت تحذف حسابك الخاص (نفسك)
+        # 2. حذف سجلات النشاط المرتبطة بالمستخدم أولاً (لتفادي مشكلة المفتاح الخارجي)
+        ActivityLog.query.filter_by(user_id=user.id).delete()
+
+        # 3. إذا كنت تحذف حسابك الخاص (نفسك)
         if user.id == current_user.id:
-            # سجل خروج المستخدم أولاً (لإبطال الجلسة)
-            logout_user()
-            # احذف المستخدم من قاعدة البيانات
+            logout_user()  # تسجيل الخروج أولاً
             db.session.delete(user)
             db.session.commit()
             flash('✅ تم حذف حسابك بنجاح.', 'success')
             return redirect(url_for('login'))
 
-        # 3. حذف مستخدم عادي (وليس أنت)
+        # 4. حذف مستخدم عادي (وليس أنت)
         db.session.delete(user)
         db.session.commit()
         log_activity(current_user.id, f'حذف المستخدم {user.student_id}')
