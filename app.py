@@ -287,7 +287,6 @@ def log_activity(user_id, action, ip=None):
 # ==================== دالة إضافة الأسئلة الافتراضية ====================
 def add_default_questions():
     """إضافة الأسئلة المحددة مسبقاً لكل درس إذا لم تكن موجودة"""
-    # تعريف الأسئلة
     questions_data = [
         # الدرس الأول: السلامة المهنية للحاسوب
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'من قواعد السلامة المهنية، يجب أن تكون عيناك في مستوى الجزء العلوي من الشاشة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
@@ -890,18 +889,39 @@ def admin_toggle_admin(user_id):
     flash(f'تم تحديث صلاحية المستخدم.', 'success')
     return redirect(url_for('admin_users'))
 
+# ==================== دالة حذف المستخدم المطورة ====================
 @app.route('/admin/user/<int:user_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def admin_delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    if user.is_admin:
-        flash('لا يمكن حذف المسؤول.', 'danger')
-        return redirect(url_for('admin_users'))
-    db.session.delete(user)
-    db.session.commit()
-    log_activity(current_user.id, f'حذف المستخدم {user.student_id}')
-    flash('تم حذف المستخدم نهائياً.', 'success')
+    try:
+        user = User.query.get_or_404(user_id)
+
+        # 1. منع حذف مسؤول آخر (وليس أنت)
+        if user.is_admin and user.id != current_user.id:
+            flash('⚠️ لا يمكنك حذف مسؤول آخر.', 'danger')
+            return redirect(url_for('admin_users'))
+
+        # 2. إذا كنت تحذف حسابك الخاص (نفسك)
+        if user.id == current_user.id:
+            # سجل خروج المستخدم أولاً (لإبطال الجلسة)
+            logout_user()
+            # احذف المستخدم من قاعدة البيانات
+            db.session.delete(user)
+            db.session.commit()
+            flash('✅ تم حذف حسابك بنجاح.', 'success')
+            return redirect(url_for('login'))
+
+        # 3. حذف مستخدم عادي (وليس أنت)
+        db.session.delete(user)
+        db.session.commit()
+        log_activity(current_user.id, f'حذف المستخدم {user.student_id}')
+        flash('✅ تم حذف المستخدم بنجاح.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'❌ حدث خطأ أثناء حذف المستخدم: {str(e)}', 'danger')
+
     return redirect(url_for('admin_users'))
 
 # ==================== إدارة التصنيفات ====================
@@ -1264,7 +1284,7 @@ def admin_reset_db():
             db.session.flush()
             lesson_ids[lesson_data['title']] = lesson.id
 
-        # إنشاء الأسئلة الافتراضية القديمة (للتوافق مع ما كان موجوداً)
+        # إنشاء الأسئلة الافتراضية القديمة
         default_questions = [
             {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
              'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
