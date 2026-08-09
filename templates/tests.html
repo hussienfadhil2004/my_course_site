@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📝 الاختبارات</h2>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>🎲 اختبار عشوائي شامل</h5>
+                <p>30 سؤالاً من جميع الدروس<br>الوقت: 30 دقيقة</p>
+                <a href="/test" class="btn btn-primary">ابدأ</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>⚡ اختبار سرعة</h5>
+                <p>30 سؤالاً عشوائياً<br>الوقت: 10 دقائق فقط</p>
+                <a href="/test/speed" class="btn btn-warning">ابدأ</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4 class="mt-5">📚 اختبارات حسب الموضوع</h4>
+<div class="row">
+    {% for lesson in lessons %}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6>{{ lesson.order }}. {{ lesson.title }}</h6>
+                <a href="/test/subject/{{ lesson.id }}" class="btn btn-outline-success btn-sm">اختبار هذا الدرس</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
