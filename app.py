@@ -556,26 +556,60 @@ def lesson_detail(lesson_id):
     return render_template('lesson_detail.html', lesson=lesson, prev_lesson=prev_lesson, next_lesson=next_lesson,
                          is_completed=is_completed, questions=questions, category=lesson.category)
 
+# ==================== دالة إكمال الدرس المطورة ====================
 @app.route('/complete_lesson/<int:lesson_id>', methods=['POST'])
 @login_required
 def complete_lesson(lesson_id):
-    lesson = Lesson.query.get_or_404(lesson_id)
-    progress = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson.id).first()
-    if not progress:
-        progress = LessonProgress(user_id=current_user.id, lesson_id=lesson.id)
-        db.session.add(progress)
-    if not progress.is_completed:
+    try:
+        lesson = Lesson.query.get_or_404(lesson_id)
+        
+        # البحث عن تقدم الدرس للمستخدم الحالي
+        progress = LessonProgress.query.filter_by(
+            user_id=current_user.id,
+            lesson_id=lesson.id
+        ).first()
+        
+        # إذا لم يكن موجوداً، قم بإنشائه
+        if not progress:
+            progress = LessonProgress(
+                user_id=current_user.id,
+                lesson_id=lesson.id,
+                is_completed=False
+            )
+            db.session.add(progress)
+            db.session.flush()  # للحصول على ID دون commit
+        
+        # إذا كان مكتملاً بالفعل
+        if progress.is_completed:
+            flash('الدرس مكتمل مسبقاً.', 'info')
+            return redirect(url_for('lesson_detail', lesson_id=lesson.id))
+        
+        # تحديث حالة الإكمال
         progress.is_completed = True
         progress.completed_at = datetime.utcnow()
+        
+        # إضافة نقاط الخبرة
         current_user.xp_points += 50
+        
+        # ترقية المستوى إذا استوفى الشروط
         if current_user.xp_points >= current_user.level * 200:
             current_user.level += 1
-            flash(f'🎉 ترقيت إلى المستوى {current_user.level}!', 'success')
+            flash(f'🎉 مبروك! ترقيت إلى المستوى {current_user.level}!', 'success')
+        
+        # حفظ جميع التغييرات
         db.session.commit()
+        
+        # تسجيل النشاط
         log_activity(current_user.id, f'أكمل الدرس: {lesson.title}')
-        flash('✅ تم إكمال الدرس!', 'success')
-    else:
-        flash('الدرس مكتمل مسبقاً.', 'info')
+        
+        flash('✅ تم إكمال الدرس بنجاح!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        # تسجيل الخطأ في سجلات السيرفر
+        print(f"❌ خطأ في complete_lesson: {str(e)}")
+        flash(f'❌ حدث خطأ أثناء إكمال الدرس: {str(e)}', 'danger')
+    
     return redirect(url_for('lesson_detail', lesson_id=lesson.id))
 
 @app.route('/tests')
