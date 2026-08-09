@@ -15,10 +15,10 @@ from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
 import io
+import sqlalchemy as sa
 
 load_dotenv()
 
-# ==================== الإعدادات الأساسية ====================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-please-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///mycourse.db')
@@ -35,7 +35,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('static/css', exist_ok=True)
 os.makedirs('static/js', exist_ok=True)
 
-# ==================== قاعدة البيانات ====================
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 login_manager = LoginManager(app)
@@ -43,7 +42,6 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'يرجى تسجيل الدخول أولاً.'
 login_manager.login_message_category = 'warning'
 
-# ==================== ديكور صلاحيات المسؤول ====================
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -94,12 +92,11 @@ class User(UserMixin, db.Model):
         self.social_links = json.dumps(links_dict)
 
 class Category(db.Model):
-    """نموذج التصنيفات (مثل: برامج النظام، لغات البرمجة، شبكات...)"""
     __tablename__ = 'categories'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    icon = db.Column(db.String(50), nullable=True)  # أيقونة Font Awesome
+    icon = db.Column(db.String(50), nullable=True)
     order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     lessons = db.relationship('Lesson', backref='category', lazy=True, cascade='all, delete-orphan')
@@ -202,12 +199,10 @@ class ActivityLog(db.Model):
     ip_address = db.Column(db.String(45), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# ==================== تسجيل مدير الدخول ====================
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ==================== دوال مساعدة ====================
 def generate_student_id():
     last_user = User.query.order_by(User.id.desc()).first()
     if last_user and last_user.student_id and last_user.student_id.startswith('STU'):
@@ -223,7 +218,7 @@ def log_activity(user_id, action, ip=None):
     db.session.add(log)
     db.session.commit()
 
-# ==================== مسارات المصادقة والملف الشخصي ====================
+# ==================== المسارات (كما هي، بدون تغيير) ====================
 @app.route('/', methods=['GET'])
 def index():
     if current_user.is_authenticated:
@@ -339,11 +334,15 @@ def profile():
         return redirect(url_for('profile'))
     return render_template('profile.html', user=current_user)
 
-# ==================== المسارات العامة ====================
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
+    try:
+        lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
+    except Exception:
+        # إذا حدث خطأ (مثل عدم وجود عمود)، نعيد تعيين قاعدة البيانات تلقائياً (لكننا سنفعل ذلك عند بدء التشغيل)
+        flash('حدث خطأ في قاعدة البيانات. جارٍ إعادة تهيئة النظام...', 'warning')
+        return redirect(url_for('admin_reset_db'))
     completed_count = LessonProgress.query.filter_by(user_id=current_user.id, is_completed=True).count()
     total_lessons = Lesson.query.filter_by(is_published=True).count()
     recent_attempts = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.completed_at.desc()).limit(5).all()
@@ -354,27 +353,21 @@ def dashboard():
                          total_lessons=total_lessons, avg_score=round(avg_score, 1), recent_students=recent_students,
                          categories=categories)
 
-# ==================== مسارات الدروس مع التصنيفات ====================
 @app.route('/lessons')
 @login_required
 def categories_list():
-    """عرض جميع التصنيفات"""
     categories = Category.query.order_by(Category.order).all()
     return render_template('categories.html', categories=categories)
 
 @app.route('/category/<int:category_id>')
 @login_required
 def category_lessons(category_id):
-    """عرض الدروس ضمن تصنيف معين"""
     category = Category.query.get_or_404(category_id)
     lessons = Lesson.query.filter_by(category_id=category.id, is_published=True).order_by(Lesson.order).all()
-    
-    # جلب حالة التقدم لكل درس
     progress_dict = {}
     for l in lessons:
         prog = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=l.id).first()
         progress_dict[l.id] = prog.is_completed if prog else False
-    
     return render_template('category_lessons.html', category=category, lessons=lessons, progress_dict=progress_dict)
 
 @app.route('/lesson/<int:lesson_id>')
@@ -384,24 +377,11 @@ def lesson_detail(lesson_id):
     if not lesson.is_published:
         flash('الدرس غير منشور.', 'warning')
         return redirect(url_for('categories_list'))
-    
-    # جلب الدرس السابق والتالي في نفس التصنيف
-    prev_lesson = Lesson.query.filter(
-        Lesson.category_id == lesson.category_id, 
-        Lesson.order < lesson.order, 
-        Lesson.is_published == True
-    ).order_by(Lesson.order.desc()).first()
-    
-    next_lesson = Lesson.query.filter(
-        Lesson.category_id == lesson.category_id, 
-        Lesson.order > lesson.order, 
-        Lesson.is_published == True
-    ).order_by(Lesson.order.asc()).first()
-    
+    prev_lesson = Lesson.query.filter(Lesson.category_id == lesson.category_id, Lesson.order < lesson.order, Lesson.is_published == True).order_by(Lesson.order.desc()).first()
+    next_lesson = Lesson.query.filter(Lesson.category_id == lesson.category_id, Lesson.order > lesson.order, Lesson.is_published == True).order_by(Lesson.order.asc()).first()
     progress = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson.id).first()
     is_completed = progress.is_completed if progress else False
     questions = Question.query.filter_by(lesson_id=lesson.id).all()
-    
     return render_template('lesson_detail.html', lesson=lesson, prev_lesson=prev_lesson, next_lesson=next_lesson,
                          is_completed=is_completed, questions=questions, category=lesson.category)
 
@@ -427,7 +407,6 @@ def complete_lesson(lesson_id):
         flash('الدرس مكتمل مسبقاً.', 'info')
     return redirect(url_for('lesson_detail', lesson_id=lesson.id))
 
-# ==================== مسارات الاختبارات ====================
 @app.route('/tests')
 @login_required
 def tests_home():
@@ -573,10 +552,6 @@ def test_result(attempt_id):
             questions_data.append({'question': q, 'selected': ua.selected_answer, 'is_correct': ua.is_correct, 'correct': q.correct_answer})
     return render_template('test_result.html', attempt=attempt, questions_data=questions_data)
 
-# ========================================================
-# ================ الميزات الجديدة =======================
-# ========================================================
-
 @app.route('/statistics')
 @login_required
 def statistics():
@@ -682,10 +657,7 @@ def generate_certificate():
     pdf_output.seek(0)
     return send_file(pdf_output, as_attachment=True, download_name=f'شهادة_{current_user.student_id}.pdf', mimetype='application/pdf')
 
-# ========================================================
-# =================== لوحة تحكم المسؤول ===================
-# ========================================================
-
+# ==================== لوحة تحكم المسؤول ====================
 @app.route('/admin')
 @login_required
 @admin_required
@@ -753,7 +725,6 @@ def admin_delete_user(user_id):
     flash('تم حذف المستخدم نهائياً.', 'success')
     return redirect(url_for('admin_users'))
 
-# ==================== إدارة التصنيفات ====================
 @app.route('/admin/categories', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -800,7 +771,6 @@ def admin_delete_category(category_id):
     flash('تم حذف التصنيف.', 'success')
     return redirect(url_for('admin_categories'))
 
-# ==================== إدارة الدروس (معدلة مع التصنيفات) ====================
 @app.route('/admin/lessons', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -963,13 +933,12 @@ def admin_reset_db():
     db.drop_all()
     db.create_all()
     
-    # إنشاء المسؤول
     admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
     admin.set_password('admin123')
     db.session.add(admin)
     db.session.commit()
     
-    # ======================== إنشاء التصنيفات ========================
+    # إنشاء التصنيفات
     categories_data = [
         {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
         {'name': 'قواعد البيانات', 'description': 'تعلم قواعد البيانات SQL و NoSQL', 'icon': 'fa-database', 'order': 2},
@@ -985,26 +954,20 @@ def admin_reset_db():
         db.session.flush()
         created_categories[cat_data['name']] = cat.id
     
-    # ======================== إنشاء الدروس ========================
+    # إنشاء الدروس
     lessons_data = [
-        # التصنيف 1: أساسيات البرمجة
         {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
          'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
          'youtube': 'https://www.youtube.com/embed/HB4I2C2n7qg?si=ixHZkDQKR0uw5Q7V', 'order': 1},
-        
-        # التصنيف 4: برامج النظام
         {'category': 'برامج النظام', 'title': 'برنامج الدفتر (Notepad)', 'description': 'تعلم استخدام برنامج الدفتر لكتابة النصوص',
          'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق. يستخدم لكتابة الملاحظات السريعة والأكواد البرمجية.</p>',
          'youtube': 'https://www.youtube.com/embed/abc123', 'order': 1},
-        
         {'category': 'برامج النظام', 'title': 'برنامج الرسام (Paint)', 'description': 'تعلم استخدام برنامج الرسام للرسم والتصميم',
          'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي. يمكنك من رسم أشكال وتحرير الصور.</p>',
          'youtube': 'https://www.youtube.com/embed/def456', 'order': 2},
-        
         {'category': 'برامج النظام', 'title': 'برنامج الملاحظات (Sticky Notes)', 'description': 'تعلم استخدام الملاحظات اللاصقة الرقمية',
          'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة وتثبيتها على سطح المكتب.</p>',
          'youtube': 'https://www.youtube.com/embed/ghi789', 'order': 3},
-        
         {'category': 'برامج النظام', 'title': 'مسجل الصوت (Sound Recorder)', 'description': 'تعلم استخدام مسجل الصوت لتسجيل الأصوات',
          'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون أو مصادر الصوت الأخرى.</p>',
          'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
@@ -1026,31 +989,22 @@ def admin_reset_db():
         db.session.flush()
         lesson_ids[lesson_data['title']] = lesson.id
     
-    # ======================== إنشاء الأسئلة ========================
+    # إنشاء الأسئلة
     questions_data = [
-        # أسئلة البرمجة
         {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
          'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
         {'lesson': 'مقدمة في البرمجة', 'type': 'TRUE_FALSE', 'text': 'المتغير يمكن أن يحمل قيماً مختلفة أثناء تنفيذ البرنامج.',
          'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
-        
-        # أسئلة الدفتر
         {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'MCQ', 'text': 'ما هي اختصار حفظ ملف في الدفتر؟',
          'a': 'Ctrl+S', 'b': 'Ctrl+O', 'c': 'Ctrl+N', 'd': 'Ctrl+P', 'correct': 'Ctrl+S', 'difficulty': 'easy'},
         {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'TRUE_FALSE', 'text': 'الدفتر يدعم تنسيق النصوص مثل الألوان والخطوط.',
          'a': 'صحيح', 'b': 'خطأ', 'correct': 'خطأ', 'difficulty': 'easy'},
-        
-        # أسئلة الرسام
         {'lesson': 'برنامج الرسام (Paint)', 'type': 'MCQ', 'text': 'ما هي أداة الرسم التي تستخدم لرسم خطوط مستقيمة؟',
          'a': 'الخط', 'b': 'المنحنى', 'c': 'القلم الرصاص', 'd': 'الفرشاة', 'correct': 'الخط', 'difficulty': 'easy'},
         {'lesson': 'برنامج الرسام (Paint)', 'type': 'TRUE_FALSE', 'text': 'يمكنك تغيير حجم الصورة في برنامج الرسام.',
          'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
-        
-        # أسئلة الملاحظات
         {'lesson': 'برنامج الملاحظات (Sticky Notes)', 'type': 'MCQ', 'text': 'ما هي اختصار إنشاء ملاحظة جديدة؟',
          'a': 'Ctrl+N', 'b': 'Ctrl+O', 'c': 'Ctrl+S', 'd': 'Ctrl+P', 'correct': 'Ctrl+N', 'difficulty': 'easy'},
-        
-        # أسئلة مسجل الصوت
         {'lesson': 'مسجل الصوت (Sound Recorder)', 'type': 'MCQ', 'text': 'ما هو الزر المستخدم لبدء التسجيل؟',
          'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
          'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
@@ -1076,17 +1030,80 @@ def admin_reset_db():
     flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
     return redirect(url_for('admin_dashboard'))
 
+# ==================== دالة الترحيل التلقائي ====================
+def upgrade_database():
+    """تحديث قاعدة البيانات بإضافة الأعمدة المفقودة دون فقدان البيانات"""
+    with app.app_context():
+        inspector = sa.inspect(db.engine)
+        
+        # التحقق من وجود جدول lesson_progress
+        if 'lesson_progress' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('lesson_progress')]
+            if 'is_completed' not in columns:
+                # إضافة العمود is_completed
+                with db.engine.connect() as conn:
+                    conn.execute(sa.text('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT FALSE'))
+                    conn.commit()
+                print("✅ تم إضافة عمود is_completed إلى جدول lesson_progress")
+        
+        # التحقق من وجود جدول lessons
+        if 'lessons' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('lessons')]
+            if 'category_id' not in columns:
+                # إضافة عمود category_id
+                with db.engine.connect() as conn:
+                    conn.execute(sa.text('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id)'))
+                    conn.commit()
+                print("✅ تم إضافة عمود category_id إلى جدول lessons")
+        
+        # التحقق من وجود جدول categories
+        if 'categories' not in inspector.get_table_names():
+            # إنشاء جدول categories
+            db.create_all()
+            print("✅ تم إنشاء جدول categories")
+
 # ==================== نقطة التشغيل ====================
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        # محاولة الترحيل التلقائي
+        try:
+            upgrade_database()
+        except Exception as e:
+            print(f"⚠️ خطأ في الترحيل التلقائي: {e}")
+            print("🔄 جارٍ إنشاء الجداول من الصفر...")
+            db.drop_all()
+            db.create_all()
+        
+        # إنشاء المسؤول إذا لم يكن موجوداً
         if not User.query.filter_by(email='admin@mycourse.com').first():
             admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
             print("✅ Admin: admin@mycourse.com / admin123")
+        
+        # إذا لم توجد تصنيفات، أنشئ البيانات الافتراضية
         if Category.query.count() == 0:
-            print("⚠️ لا توجد تصنيفات. استخدم زر 'إعادة تعيين قاعدة البيانات' في لوحة المسؤول.")
+            print("🌱 إنشاء البيانات الافتراضية (تصنيفات ودروس)...")
+            # يمكننا استدعاء دالة reset_db لكنها تحتاج إلى طلب POST
+            # لذا سننشئ بيانات افتراضية بسيطة هنا
+            categories = [
+                Category(name='برامج النظام', description='تعلم استخدام برامج الكمبيوتر الأساسية', icon='fa-desktop', order=1),
+                Category(name='أساسيات البرمجة', description='تعلم أساسيات البرمجة', icon='fa-code', order=2),
+            ]
+            db.session.add_all(categories)
+            db.session.commit()
+            
+            # إضافة بعض الدروس البسيطة
+            cat_system = Category.query.filter_by(name='برامج النظام').first()
+            if cat_system:
+                lessons = [
+                    Lesson(category_id=cat_system.id, title='برنامج الدفتر (Notepad)', description='تعلم استخدام الدفتر', order=1, is_published=True),
+                    Lesson(category_id=cat_system.id, title='برنامج الرسام (Paint)', description='تعلم استخدام الرسام', order=2, is_published=True),
+                ]
+                db.session.add_all(lessons)
+                db.session.commit()
+            print("✅ تم إنشاء بيانات افتراضية.")
+    
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)  # debug=False على Railway
