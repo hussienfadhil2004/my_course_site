@@ -276,9 +276,14 @@ def generate_student_id():
     return 'STU0001'
 
 def log_activity(user_id, action, ip=None):
-    log = ActivityLog(user_id=user_id, action=action, ip_address=ip or request.remote_addr)
-    db.session.add(log)
-    db.session.commit()
+    try:
+        log = ActivityLog(user_id=user_id, action=action, ip_address=ip or request.remote_addr)
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        # إذا فشل تسجيل النشاط، لا نريد أن نوقف العملية الأساسية
+        print(f"⚠️ فشل تسجيل النشاط: {e}")
+        db.session.rollback()
 
 # ==================== مسارات المصادقة والملف الشخصي ====================
 @app.route('/', methods=['GET'])
@@ -860,7 +865,6 @@ def admin_edit_category(category_id):
 def admin_delete_category(category_id):
     try:
         category = Category.query.get_or_404(category_id)
-        # حذف التصنيف مع جميع دروسه (بسبب cascade='all, delete-orphan')
         db.session.delete(category)
         db.session.commit()
         log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
@@ -954,6 +958,7 @@ def admin_delete_lesson(lesson_id):
         flash(f'حدث خطأ أثناء حذف الدرس: {str(e)}', 'danger')
     return redirect(url_for('admin_lessons'))
 
+# ==================== إدارة الأسئلة (تم إصلاح دالة الحذف) ====================
 @app.route('/admin/questions', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -995,19 +1000,39 @@ def admin_questions():
     lessons = Lesson.query.all()
     return render_template('admin/questions.html', questions=questions, lessons=lessons)
 
+# ========== دالة حذف السؤال (تم إصلاحها) ==========
 @app.route('/admin/question/<int:question_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def admin_delete_question(question_id):
     try:
-        q = Question.query.get_or_404(question_id)
+        # البحث عن السؤال
+        q = Question.query.get(question_id)
+        if not q:
+            flash('السؤال غير موجود.', 'danger')
+            return redirect(url_for('admin_questions'))
+        
+        # حفظ معلومات السؤال للتسجيل
+        question_text = q.question_text[:50]
+        lesson_title = q.lesson.title if q.lesson else 'بدون درس'
+        
+        # حذف السؤال
         db.session.delete(q)
         db.session.commit()
-        log_activity(current_user.id, f'حذف سؤالاً رقم {question_id}')
-        flash('تم حذف السؤال بنجاح.', 'success')
+        
+        # تسجيل النشاط (مع تجنب الأخطاء)
+        try:
+            log_activity(current_user.id, f'حذف سؤالاً: "{question_text}" من درس "{lesson_title}"')
+        except Exception as log_err:
+            print(f"⚠️ فشل تسجيل النشاط: {log_err}")
+            db.session.rollback()
+        
+        flash('✅ تم حذف السؤال بنجاح.', 'success')
+        
     except Exception as e:
         db.session.rollback()
-        flash(f'حدث خطأ أثناء حذف السؤال: {str(e)}', 'danger')
+        flash(f'❌ حدث خطأ أثناء حذف السؤال: {str(e)}', 'danger')
+    
     return redirect(url_for('admin_questions'))
 
 @app.route('/admin/announcements', methods=['GET', 'POST'])
