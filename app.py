@@ -56,41 +56,23 @@ def admin_required(f):
 
 # ==================== دوال إنشاء الصورة الافتراضية ====================
 def generate_default_avatar(name, user_id, size=200):
-    """إنشاء صورة افتراضية من أول حرف من الاسم"""
     try:
-        # الحصول على أول حرف من الاسم
         first_letter = name.strip()[0].upper() if name else '?'
-        
-        # قائمة ألوان خلفية عشوائية (ألوان مشرقة)
         colors = [
             (231, 76, 60), (46, 204, 113), (52, 152, 219), (155, 89, 182),
             (241, 196, 15), (230, 126, 34), (26, 188, 156), (211, 84, 0),
             (142, 68, 173), (41, 128, 185), (39, 174, 96), (192, 57, 43)
         ]
-        
-        # اختيار لون بناءً على اسم المستخدم (لتثبيت اللون لنفس المستخدم)
         color_index = sum(ord(c) for c in name) % len(colors)
         bg_color = colors[color_index]
-        
-        # إنشاء صورة جديدة
         img = Image.new('RGB', (size, size), bg_color)
         draw = ImageDraw.Draw(img)
-        
-        # رسم دائرة بيضاء كحدود
         border_width = 4
         draw.ellipse([border_width, border_width, size-border_width, size-border_width], outline=(255, 255, 255), width=border_width)
-        
-        # رسم الحرف في المنتصف
         try:
-            # محاولة استخدام خط النظام
-            font_size = int(size * 0.6)
-            font = ImageFont.truetype("arial.ttf", font_size)
+            font = ImageFont.truetype("arial.ttf", int(size * 0.6))
         except:
-            # إذا لم يتوفر الخط، استخدم الخط الافتراضي
             font = ImageFont.load_default()
-            font_size = int(size * 0.5)
-        
-        # حساب موضع الحرف في المنتصف
         bbox = draw.textbbox((0, 0), first_letter, font=font) if hasattr(draw, 'textbbox') else None
         if bbox:
             text_width = bbox[2] - bbox[0]
@@ -98,41 +80,31 @@ def generate_default_avatar(name, user_id, size=200):
         else:
             text_width = int(size * 0.4)
             text_height = int(size * 0.6)
-        
         x = (size - text_width) // 2
         y = (size - text_height) // 2
-        
-        # رسم الحرف
         draw.text((x, y), first_letter, fill=(255, 255, 255), font=font)
-        
-        # حفظ الصورة
         filename = f"avatar_{user_id}.png"
         filepath = os.path.join('static/default_avatars', filename)
         img.save(filepath, 'PNG')
-        
         return f"default_avatars/{filename}"
     except Exception as e:
         print(f"⚠️ فشل إنشاء الصورة الافتراضية: {e}")
         return 'default.png'
 
 def create_default_avatar_for_user(user):
-    """إنشاء صورة افتراضية لمستخدم محدد"""
     avatar_path = generate_default_avatar(user.full_name, user.id)
     user.profile_pic = avatar_path
     db.session.commit()
     return avatar_path
 
 def create_default_avatars_for_all_users():
-    """إنشاء صور افتراضية لجميع المستخدمين الذين ليس لديهم صورة"""
     users = User.query.filter(
         (User.profile_pic == 'default.png') | 
         (User.profile_pic == None) |
         (User.profile_pic == '')
     ).all()
-    
     for user in users:
         create_default_avatar_for_user(user)
-    
     return len(users)
 
 # ==================== دالة ترقية قاعدة البيانات ====================
@@ -149,7 +121,6 @@ def upgrade_database():
             for col in required_columns:
                 if col not in columns:
                     missing.append(col)
-
             if missing:
                 print(f"⚠️ الأعمدة المفقودة في lesson_progress: {missing}")
                 for col in missing:
@@ -368,7 +339,6 @@ def log_activity(user_id, action, ip=None):
 
 # ==================== دالة إضافة الأسئلة الافتراضية ====================
 def add_default_questions():
-    """إضافة الأسئلة المحددة مسبقاً لكل درس إذا لم تكن موجودة"""
     questions_data = [
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'من قواعد السلامة المهنية، يجب أن تكون عيناك في مستوى الجزء العلوي من الشاشة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'MCQ', 'question_text': 'ما هي قاعدة 20-20-20 التي تحمي العينين؟', 'option_a': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'option_b': 'كل 20 ساعة، انظر إلى شيء يبعد 20 متراً لمدة 20 دقيقة', 'option_c': 'كل 20 دقيقة، أغمض عينيك لمدة 20 ثانية', 'option_d': 'كل 20 دقيقة، اشرب 20 مل من الماء', 'correct_answer': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'difficulty': 'easy'},
@@ -488,12 +458,9 @@ def register():
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
-        
-        # إنشاء صورة افتراضية للمستخدم الجديد
         avatar_path = generate_default_avatar(full_name, new_user.id)
         new_user.profile_pic = avatar_path
         db.session.commit()
-        
         log_activity(new_user.id, f'تسجيل حساب جديد: {new_user.student_id}')
         flash(f'تم إنشاء حسابك! معرفك: {new_user.student_id}', 'success')
         login_user(new_user, remember=True)
@@ -626,13 +593,12 @@ def lesson_detail(lesson_id):
     return render_template('lesson_detail.html', lesson=lesson, prev_lesson=prev_lesson, next_lesson=next_lesson,
                          is_completed=is_completed, questions=questions, category=lesson.category)
 
-# ==================== دالة إكمال الدرس المطورة (مع تنظيف السجلات التالفة) ====================
+# ==================== دالة إكمال الدرس المطورة ====================
 @app.route('/complete_lesson/<int:lesson_id>', methods=['POST'])
 @login_required
 def complete_lesson(lesson_id):
     try:
-        # 0. تنظيف السجلات التالفة (مرة واحدة لكل طلب - حل مؤقت)
-        # حذف أي سجل في lesson_progress يشير إلى درس غير موجود
+        # تنظيف السجلات التالفة (حل مؤقت)
         orphan_count = db.session.query(LessonProgress).filter(
             ~LessonProgress.lesson_id.in_(db.session.query(Lesson.id))
         ).delete(synchronize_session=False)
@@ -640,19 +606,18 @@ def complete_lesson(lesson_id):
             db.session.commit()
             print(f"🧹 تم حذف {orphan_count} سجل(ات) تالفة من lesson_progress.")
 
-        # 1. التحقق من وجود الدرس في قاعدة البيانات أولاً
+        # التحقق من وجود الدرس
         lesson = Lesson.query.get(lesson_id)
         if not lesson:
-            flash('⚠️ الدرس المطلوب غير موجود في قاعدة البيانات.', 'danger')
+            flash('⚠️ الدرس المطلوب غير موجود.', 'danger')
             return redirect(url_for('categories_list'))
 
-        # 2. البحث عن تقدم الدرس للمستخدم الحالي
+        # البحث عن تقدم الدرس
         progress = LessonProgress.query.filter_by(
             user_id=current_user.id,
             lesson_id=lesson.id
         ).first()
         
-        # 3. إذا لم يكن موجوداً، قم بإنشائه
         if not progress:
             progress = LessonProgress(
                 user_id=current_user.id,
@@ -662,29 +627,21 @@ def complete_lesson(lesson_id):
             db.session.add(progress)
             db.session.flush()
         
-        # 4. إذا كان مكتملاً بالفعل
         if progress.is_completed:
             flash('الدرس مكتمل مسبقاً.', 'info')
             return redirect(url_for('lesson_detail', lesson_id=lesson.id))
         
-        # 5. تحديث حالة الإكمال
+        # تحديث الإكمال
         progress.is_completed = True
         progress.completed_at = datetime.utcnow()
-        
-        # 6. إضافة نقاط الخبرة
         current_user.xp_points += 50
         
-        # 7. ترقية المستوى إذا استوفى الشروط
         if current_user.xp_points >= current_user.level * 200:
             current_user.level += 1
             flash(f'🎉 مبروك! ترقيت إلى المستوى {current_user.level}!', 'success')
         
-        # 8. حفظ جميع التغييرات
         db.session.commit()
-        
-        # 9. تسجيل النشاط
         log_activity(current_user.id, f'أكمل الدرس: {lesson.title}')
-        
         flash('✅ تم إكمال الدرس بنجاح!', 'success')
         
     except Exception as e:
@@ -1005,7 +962,6 @@ def admin_toggle_admin(user_id):
     flash(f'تم تحديث صلاحية المستخدم.', 'success')
     return redirect(url_for('admin_users'))
 
-# ==================== دالة حذف المستخدم المطورة ====================
 @app.route('/admin/user/<int:user_id>/delete', methods=['POST'])
 @login_required
 @admin_required
@@ -1346,12 +1302,10 @@ def admin_reset_db():
         db.session.add(admin)
         db.session.commit()
         
-        # إنشاء صورة افتراضية للمسؤول
         avatar_path = generate_default_avatar(admin.full_name, admin.id)
         admin.profile_pic = avatar_path
         db.session.commit()
 
-        # إنشاء التصنيفات
         categories_data = [
             {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
             {'name': 'قواعد البيانات', 'description': 'تعلم قواعد البيانات SQL و NoSQL', 'icon': 'fa-database', 'order': 2},
@@ -1367,7 +1321,6 @@ def admin_reset_db():
             db.session.flush()
             created_categories[cat_data['name']] = cat.id
 
-        # إنشاء الدروس
         lessons_data = [
             {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
              'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
@@ -1402,7 +1355,6 @@ def admin_reset_db():
             db.session.flush()
             lesson_ids[lesson_data['title']] = lesson.id
 
-        # إنشاء الأسئلة الافتراضية القديمة
         default_questions = [
             {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
              'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
@@ -1458,8 +1410,6 @@ if __name__ == '__main__':
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
-            
-            # إنشاء صورة افتراضية للمسؤول
             avatar_path = generate_default_avatar(admin.full_name, admin.id)
             admin.profile_pic = avatar_path
             db.session.commit()
@@ -1490,12 +1440,10 @@ if __name__ == '__main__':
                     db.session.commit()
                     print("✅ تم إنشاء دروس افتراضية لبرامج النظام.")
             
-            # إنشاء صور افتراضية للمستخدمين الحاليين
             print("🔄 جاري إنشاء صور افتراضية للمستخدمين...")
             count = create_default_avatars_for_all_users()
             print(f"✅ تم إنشاء {count} صورة افتراضية للمستخدمين.")
 
-        # إنشاء صور افتراضية للمستخدمين الذين لا يملكون صوراً
         count = create_default_avatars_for_all_users()
         if count > 0:
             print(f"✅ تم إنشاء {count} صورة افتراضية للمستخدمين الجدد.")
