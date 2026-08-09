@@ -1,7 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
+{% if lesson %}
+    <h5>اختبار: {{ lesson.title }}</h5>
+{% else %}
+    {% if test_type == 'speed' %}
+        <h5>⚡ اختبار سرعة</h5>
+    {% elif test_type == 'random' %}
+        <h5>🎲 اختبار عشوائي شامل</h5>
+    {% endif %}
+{% endif %}
+
 <h3>سؤال {{ index }} من {{ total }}</h3>
 <p>{{ question.question_text }}</p>
+
+<p>الوقت المتبقي: <span id="timer">{{ remaining // 60 }}:{{ '%02d' % (remaining % 60) }}</span></p>
+
+<div id="time-data" data-remaining="{{ remaining }}" style="display:none;"></div>
 
 <form method="POST" action="/test/answer">
     {% if question.question_type == 'tf' %}
@@ -21,4 +35,23 @@
     {% endif %}
     <button class="btn btn-primary mt-2">التالي ←</button>
 </form>
+
+<script>
+(function() {
+    const timeData = document.getElementById('time-data');
+    const remaining = parseInt(timeData.getAttribute('data-remaining'), 10);
+    const timerEl = document.getElementById('timer');
+    let timeLeft = remaining;
+
+    setInterval(function() {
+        if (timeLeft <= 0) {
+            window.location.href = '/test/result';
+        }
+        timeLeft--;
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        timerEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    }, 1000);
+})();
+</script>
 {% endblock %}
