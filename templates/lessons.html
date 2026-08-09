@@ -1,52 +1,63 @@
-{% extends "base.html" %}
+{% extends "admin/admin_base.html" %}
 
-{% block title %}جميع الدروس{% endblock %}
+{% block admin_content %}
+<h4 class="fw-bold mb-4"><i class="fas fa-book me-2 text-primary"></i>إدارة الدروس</h4>
 
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold"><i class="fas fa-book-open me-2 text-primary"></i>الدروس التعليمية</h2>
-    <span class="badge bg-secondary p-2">{{ lessons|length }} درس</span>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5>إضافة درس جديد</h5>
+        <form method="POST">
+            <div class="row g-2">
+                <div class="col-md-3"><input class="form-control" name="title" placeholder="العنوان" required></div>
+                <div class="col-md-3"><input class="form-control" name="description" placeholder="الوصف المختصر"></div>
+                <div class="col-md-3"><input class="form-control" name="youtube_url" placeholder="رابط يوتيوب (Embed)"></div>
+                <div class="col-md-3">
+                    <select class="form-select" name="category_id">
+                        <option value="">-- بدون تصنيف --</option>
+                        {% for c in categories %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <textarea class="form-control" name="content" rows="3" placeholder="المحتوى النصي للدرس (يمكن استخدام HTML)"></textarea>
+                </div>
+                <div class="col-md-2"><input class="form-control" name="order" type="number" placeholder="الترتيب"></div>
+                <div class="col-md-2"><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="is_published" checked> <label>منشور</label></div></div>
+                <div class="col-md-2"><button class="btn btn-success w-100">إضافة</button></div>
+            </div>
+        </form>
+        <small class="text-muted">يمكنك استخدام HTML داخل المحتوى النصي لتنسيق النص.</small>
+    </div>
 </div>
 
-<div class="row g-4">
-    {% for lesson in lessons %}
-    <div class="col-md-6 col-lg-4">
-        <div class="card h-100 shadow-sm border-0 hover-lift">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <h5 class="card-title fw-bold">{{ lesson.title }}</h5>
-                    {% if progress_dict.get(lesson.id) %}
-                    <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>مكتمل</span>
-                    {% else %}
-                    <span class="badge bg-warning text-dark">قيد التقدم</span>
-                    {% endif %}
-                </div>
-                <p class="card-text text-muted small mt-2">{{ lesson.description|truncate(100) }}</p>
-                <div class="d-flex justify-content-between align-items-center mt-3">
-                    <small class="text-muted"><i class="fas fa-video me-1"></i> درس رقم {{ lesson.order }}</small>
-                    <a href="{{ url_for('lesson_detail', lesson_id=lesson.id) }}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-play me-1"></i> عرض
-                    </a>
-                </div>
+<div class="list-group">
+    {% for l in lessons %}
+    <div class="list-group-item">
+        <form method="POST" action="{{ url_for('admin_edit_lesson', lesson_id=l.id) }}" class="row g-2 align-items-start">
+            <div class="col-md-2"><input class="form-control form-control-sm" name="title" value="{{ l.title }}" required></div>
+            <div class="col-md-2"><input class="form-control form-control-sm" name="description" value="{{ l.description or '' }}"></div>
+            <div class="col-md-2"><input class="form-control form-control-sm" name="youtube_url" value="{{ l.youtube_url or '' }}"></div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" name="category_id">
+                    <option value="">-- بدون --</option>
+                    {% for c in categories %}
+                    <option value="{{ c.id }}" {% if l.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="col-12 text-center py-5">
-        <i class="fas fa-book fa-4x text-muted mb-3"></i>
-        <h4>لا توجد دروس حالياً</h4>
-        <p class="text-muted">سيتم إضافة الدروس قريباً</p>
+            <div class="col-12">
+                <textarea class="form-control form-control-sm" name="content" rows="2">{{ l.content or '' }}</textarea>
+            </div>
+            <div class="col-md-1"><input class="form-control form-control-sm" name="order" type="number" value="{{ l.order }}"></div>
+            <div class="col-md-1"><input class="form-check-input" type="checkbox" name="is_published" {% if l.is_published %}checked{% endif %}></div>
+            <div class="col-md-2">
+                <button class="btn btn-sm btn-primary">تعديل</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="if(confirm('حذف الدرس؟')) document.getElementById('del-{{ l.id }}').submit();">حذف</button>
+                <form id="del-{{ l.id }}" method="POST" action="{{ url_for('admin_delete_lesson', lesson_id=l.id) }}" style="display:none;"></form>
+            </div>
+        </form>
     </div>
     {% endfor %}
 </div>
 {% endblock %}
-
-<style>
-.hover-lift {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.hover-lift:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.15) !important;
-}
-</style>

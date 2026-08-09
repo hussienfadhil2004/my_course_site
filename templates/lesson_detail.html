@@ -4,12 +4,14 @@
 
 {% block content %}
 <div class="row">
-    <!-- العمود الرئيسي -->
     <div class="col-lg-8">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">الرئيسية</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('lessons_list') }}">الدروس</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('categories_list') }}">التصنيفات</a></li>
+                {% if category %}
+                <li class="breadcrumb-item"><a href="{{ url_for('category_lessons', category_id=category.id) }}">{{ category.name }}</a></li>
+                {% endif %}
                 <li class="breadcrumb-item active" aria-current="page">{{ lesson.title }}</li>
             </ol>
         </nav>
@@ -18,7 +20,6 @@
             <div class="card-body p-4">
                 <h2 class="fw-bold mb-3">{{ lesson.title }}</h2>
                 
-                <!-- شريط التقدم والحالة -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <span class="badge bg-{{ 'success' if is_completed else 'warning' }} p-2">
                         {% if is_completed %}
@@ -30,7 +31,6 @@
                     <span class="text-muted small"><i class="fas fa-list-ol me-1"></i> الدرس رقم {{ lesson.order }}</span>
                 </div>
 
-                <!-- فيديو يوتيوب -->
                 {% if lesson.youtube_url %}
                 <div class="ratio ratio-16x9 mb-4 shadow-sm rounded overflow-hidden">
                     <iframe src="{{ lesson.youtube_url }}" 
@@ -46,7 +46,6 @@
                 </div>
                 {% endif %}
 
-                <!-- ====== المحتوى النصي الجديد ====== -->
                 {% if lesson.content %}
                 <div class="lesson-content mb-4 p-4 bg-light rounded-3 border-start border-4 border-primary">
                     {{ lesson.content|safe }}
@@ -58,7 +57,6 @@
                 </div>
                 {% endif %}
 
-                <!-- الأسئلة المرتبطة -->
                 {% if questions %}
                 <div class="mb-4">
                     <h5 class="fw-bold"><i class="fas fa-question-circle me-2 text-warning"></i>أسئلة الدرس ({{ questions|length }})</h5>
@@ -85,7 +83,6 @@
                 </div>
                 {% endif %}
 
-                <!-- أزرار التنقل والإكمال -->
                 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mt-4 pt-3 border-top">
                     <div>
                         {% if prev_lesson %}
@@ -107,7 +104,7 @@
                                 {% if is_completed %}مكتمل ✓{% else %}تحديد كـ مكتمل{% endif %}
                             </button>
                         </form>
-                        <a href="{{ url_for('lessons_list') }}" class="btn btn-light">
+                        <a href="{{ url_for('categories_list') }}" class="btn btn-light">
                             <i class="fas fa-arrow-right me-1"></i> العودة للقائمة
                         </a>
                     </div>
@@ -116,7 +113,6 @@
         </div>
     </div>
 
-    <!-- العمود الجانبي: ملخص سريع -->
     <div class="col-lg-4">
         <div class="card shadow-sm border-0">
             <div class="card-body">
@@ -149,7 +145,6 @@
     </div>
 </div>
 
-<!-- تنسيق المحتوى النصي -->
 <style>
 .lesson-content {
     font-size: 1.05rem;

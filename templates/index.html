@@ -3,7 +3,6 @@
 {% block title %}اللوحة الرئيسية{% endblock %}
 
 {% block content %}
-<!-- الترحيب -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="fw-bold">👋 مرحباً، {{ user.full_name.split()[0] }}</h2>
@@ -14,7 +13,6 @@
     </div>
 </div>
 
-<!-- الإحصائيات السريعة -->
 <div class="row g-4 mb-4">
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm text-center p-3" style="background: linear-gradient(135deg, #e0e7ff, #f0f4ff);">
@@ -45,38 +43,35 @@
     </div>
 </div>
 
-<!-- المحتوى الرئيسي: دروس + اختبارات -->
 <div class="row g-4">
-    <!-- قسم الدروس (تم تغيير الرابط إلى categories_list) -->
     <div class="col-lg-8">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold mb-0"><i class="fas fa-video me-2 text-primary"></i>أحدث الدروس</h5>
+                <h5 class="fw-bold mb-0"><i class="fas fa-th-large me-2 text-primary"></i>التصنيفات</h5>
                 <a href="{{ url_for('categories_list') }}" class="text-decoration-none">عرض الكل <i class="fas fa-arrow-left"></i></a>
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    {% for lesson in lessons[:2] %}
-                    <div class="col-md-6">
-                        <div class="card h-100 border-0 shadow-sm">
-                            <div class="card-body">
-                                <h6 class="fw-bold">{{ lesson.title }}</h6>
-                                <p class="text-muted small">{{ lesson.description|truncate(60) }}</p>
-                                <a href="{{ url_for('lesson_detail', lesson_id=lesson.id) }}" class="btn btn-outline-primary btn-sm w-100">
-                                    <i class="fas fa-play me-1"></i> مشاهدة
-                                </a>
+                    {% for category in categories[:3] %}
+                    <div class="col-md-4">
+                        <a href="{{ url_for('category_lessons', category_id=category.id) }}" class="text-decoration-none text-dark">
+                            <div class="card h-100 border-0 shadow-sm text-center p-3 hover-lift">
+                                <div class="display-4 text-primary">
+                                    <i class="fas {{ category.icon or 'fa-folder' }}"></i>
+                                </div>
+                                <h6 class="fw-bold mt-2">{{ category.name }}</h6>
+                                <small class="text-muted">{{ category.lessons|selectattr('is_published')|list|length }} دروس</small>
                             </div>
-                        </div>
+                        </a>
                     </div>
                     {% else %}
-                    <div class="col-12 text-center text-muted py-3">لا توجد دروس منشورة بعد.</div>
+                    <div class="col-12 text-center text-muted py-3">لا توجد تصنيفات بعد.</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- قسم الاختبارات -->
     <div class="col-lg-4">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-transparent">
@@ -99,7 +94,6 @@
                 </p>
             </div>
         </div>
-        <!-- شارات سريعة -->
         <div class="card mt-3 shadow-sm border-0">
             <div class="card-body text-center">
                 <i class="fas fa-shield-alt fa-2x text-secondary"></i>
@@ -109,7 +103,6 @@
     </div>
 </div>
 
-<!-- قائمة الطلاب -->
 <div class="card shadow-sm border-0 mt-4">
     <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
         <h5 class="fw-bold mb-0"><i class="fas fa-users me-2 text-primary"></i>الطلاب النشطون</h5>
@@ -135,4 +128,14 @@
         <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> اضغط على أي طالب لمشاهدة ملفه الشخصي.</p>
     </div>
 </div>
+
+<style>
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
+}
+</style>
 {% endblock %}

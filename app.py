@@ -66,7 +66,6 @@ def upgrade_database():
             columns = [c['name'] for c in inspector.get_columns('lesson_progress')]
             missing = []
 
-            # الأعمدة المطلوبة في النموذج
             required_columns = ['is_completed', 'last_watched', 'completed_at']
             for col in required_columns:
                 if col not in columns:
@@ -84,7 +83,6 @@ def upgrade_database():
                             sql_type = 'TIMESTAMP' if is_postgres else 'TIMESTAMP'
                         else:
                             sql_type = 'TEXT'
-
                         db.session.execute(text(f'ALTER TABLE lesson_progress ADD COLUMN {col} {sql_type};'))
                         print(f"✅ تم إضافة العمود {col}.")
                     except Exception as e:
@@ -98,7 +96,7 @@ def upgrade_database():
         # 2. التحقق من جدول categories
         if 'categories' not in tables:
             print("⚠️ جاري إنشاء جدول categories...")
-            db.create_all()  # ينشئ الجداول المفقودة
+            db.create_all()
             print("✅ تم إنشاء الجداول المفقودة.")
 
         # 3. التحقق من عمود category_id في جدول lessons
@@ -805,6 +803,7 @@ def admin_delete_user(user_id):
     flash('تم حذف المستخدم نهائياً.', 'success')
     return redirect(url_for('admin_users'))
 
+# ==================== إدارة التصنيفات (محسّنة) ====================
 @app.route('/admin/categories', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -845,12 +844,16 @@ def admin_edit_category(category_id):
 @admin_required
 def admin_delete_category(category_id):
     category = Category.query.get_or_404(category_id)
+    if category.lessons:
+        flash('لا يمكن حذف تصنيف يحتوي على دروس. قم بنقل الدروس إلى تصنيف آخر أولاً.', 'danger')
+        return redirect(url_for('admin_categories'))
     db.session.delete(category)
     db.session.commit()
     log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
     flash('تم حذف التصنيف.', 'success')
     return redirect(url_for('admin_categories'))
 
+# ==================== إدارة الدروس (مع قائمة تصنيفات كاملة) ====================
 @app.route('/admin/lessons', methods=['GET', 'POST'])
 @login_required
 @admin_required
