@@ -22,7 +22,7 @@
                 <div class="col-12">
                     <textarea class="form-control" name="content" rows="3" placeholder="المحتوى النصي للدرس (يمكن استخدام HTML)"></textarea>
                 </div>
-                <div class="col-md-2"><input class="form-control" name="order" type="number" placeholder="الترتيب"></div>
+                <div class="col-md-2"><input class="form-control" name="order" type="number" placeholder="الترتيب" value="0"></div>
                 <div class="col-md-2"><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="is_published" checked> <label>منشور</label></div></div>
                 <div class="col-md-2"><button class="btn btn-success w-100">إضافة</button></div>
             </div>
@@ -49,7 +49,7 @@
             <div class="col-12">
                 <textarea class="form-control form-control-sm" name="content" rows="2">{{ l.content or '' }}</textarea>
             </div>
-            <div class="col-md-1"><input class="form-control form-control-sm" name="order" type="number" value="{{ l.order }}"></div>
+            <div class="col-md-1"><input class="form-control form-control-sm" name="order" type="number" value="{{ l.order or 0 }}"></div>
             <div class="col-md-1"><input class="form-check-input" type="checkbox" name="is_published" {% if l.is_published %}checked{% endif %}></div>
             <div class="col-md-2">
                 <button class="btn btn-sm btn-primary">تعديل</button>

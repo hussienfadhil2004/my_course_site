@@ -55,17 +55,14 @@ def admin_required(f):
 
 # ==================== دالة ترقية قاعدة البيانات ====================
 def upgrade_database():
-    """التحقق من وجود الأعمدة والجداول المطلوبة وإضافتها إذا لم تكن موجودة"""
     with app.app_context():
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
         is_postgres = 'postgres' in db.engine.url.drivername
 
-        # 1. التحقق من جدول lesson_progress وإضافة الأعمدة المفقودة
         if 'lesson_progress' in tables:
             columns = [c['name'] for c in inspector.get_columns('lesson_progress')]
             missing = []
-
             required_columns = ['is_completed', 'last_watched', 'completed_at']
             for col in required_columns:
                 if col not in columns:
@@ -93,13 +90,11 @@ def upgrade_database():
         else:
             print("⚠️ جدول lesson_progress غير موجود، سيتم إنشاؤه لاحقاً.")
 
-        # 2. التحقق من جدول categories
         if 'categories' not in tables:
             print("⚠️ جاري إنشاء جدول categories...")
             db.create_all()
             print("✅ تم إنشاء الجداول المفقودة.")
 
-        # 3. التحقق من عمود category_id في جدول lessons
         if 'lessons' in tables:
             columns = [c['name'] for c in inspector.get_columns('lessons')]
             if 'category_id' not in columns:
@@ -803,7 +798,7 @@ def admin_delete_user(user_id):
     flash('تم حذف المستخدم نهائياً.', 'success')
     return redirect(url_for('admin_users'))
 
-# ==================== إدارة التصنيفات (محسّنة) ====================
+# ==================== إدارة التصنيفات ====================
 @app.route('/admin/categories', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -853,7 +848,7 @@ def admin_delete_category(category_id):
     flash('تم حذف التصنيف.', 'success')
     return redirect(url_for('admin_categories'))
 
-# ==================== إدارة الدروس (مع قائمة تصنيفات كاملة) ====================
+# ==================== إدارة الدروس ====================
 @app.route('/admin/lessons', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -864,7 +859,7 @@ def admin_lessons():
         content = request.form.get('content')
         youtube_url = request.form.get('youtube_url')
         category_id = request.form.get('category_id')
-        order = request.form.get('order', 0)
+        order = request.form.get('order', 0)  # إصلاح: تعيين قيمة افتراضية 0
         is_published = 'is_published' in request.form
         if not title:
             flash('عنوان الدرس مطلوب.', 'danger')
@@ -875,7 +870,7 @@ def admin_lessons():
                 content=content,
                 youtube_url=youtube_url,
                 category_id=int(category_id) if category_id else None,
-                order=int(order), 
+                order=int(order) if order else 0,  # إصلاح: تحويل آمن
                 is_published=is_published
             )
             db.session.add(lesson)
@@ -897,7 +892,8 @@ def admin_edit_lesson(lesson_id):
     lesson.content = request.form.get('content')
     lesson.youtube_url = request.form.get('youtube_url')
     lesson.category_id = int(request.form.get('category_id')) if request.form.get('category_id') else None
-    lesson.order = int(request.form.get('order', 0))
+    order_val = request.form.get('order', 0)
+    lesson.order = int(order_val) if order_val else 0
     lesson.is_published = 'is_published' in request.form
     db.session.commit()
     log_activity(current_user.id, f'عدل درساً: {lesson.title}')

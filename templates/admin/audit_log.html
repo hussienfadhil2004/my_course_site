@@ -1,34 +1,40 @@
 {% extends "admin/admin_base.html" %}
-{% block admin_content %}
-<h3>📋 سجل التدقيق</h3>
 
-{% if logs %}
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>التاريخ</th>
-            <th>المستخدم</th>
-            <th>الإجراء</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for log in logs %}
-    <tr>
-        <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-        <td>
-            {% if log.user_id %}
-                {% set user = log.user_id | get_user %}
-                {{ user.full_name if user else '—' }}
+{% block admin_content %}
+<h4 class="fw-bold mb-4"><i class="fas fa-clipboard-list me-2 text-primary"></i>سجل التدقيق</h4>
+
+<div class="table-responsive">
+    <table class="table table-hover table-sm">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>المستخدم</th>
+                <th>الإجراء</th>
+                <th>عنوان IP</th>
+                <th>التاريخ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                    {% if log.user %}
+                        {{ log.user.full_name }} ({{ log.user.student_id }})
+                    {% else %}
+                        <span class="text-muted">مستخدم محذوف</span>
+                    {% endif %}
+                </td>
+                <td>{{ log.action }}</td>
+                <td>{{ log.ip_address or '-' }}</td>
+                <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            </tr>
             {% else %}
-                نظام
-            {% endif %}
-        </td>
-        <td>{{ log.action }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">لا توجد سجلات بعد.</p>
-{% endif %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">لا توجد سجلات بعد.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

@@ -4,7 +4,6 @@
 
 {% block content %}
 <div class="row">
-    <!-- الشريط الجانبي -->
     <div class="col-lg-2 d-none d-lg-block">
         <div class="list-group list-group-flush sticky-top pt-3">
             <a href="{{ url_for('admin_dashboard') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
@@ -12,6 +11,9 @@
             </a>
             <a href="{{ url_for('admin_users') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_users' %}active{% endif %}">
                 <i class="fas fa-users me-2"></i> المستخدمين
+            </a>
+            <a href="{{ url_for('admin_categories') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_categories' %}active{% endif %}">
+                <i class="fas fa-th-large me-2"></i> التصنيفات
             </a>
             <a href="{{ url_for('admin_lessons') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_lessons' %}active{% endif %}">
                 <i class="fas fa-book me-2"></i> الدروس
@@ -33,7 +35,6 @@
             </a>
         </div>
     </div>
-    <!-- المحتوى -->
     <div class="col-lg-10">
         {% block admin_content %}{% endblock %}
     </div>
