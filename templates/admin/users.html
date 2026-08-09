@@ -1,0 +1,63 @@
+{% extends "admin/admin_base.html" %}
+
+{% block admin_content %}
+<h4 class="fw-bold mb-4"><i class="fas fa-users me-2 text-primary"></i>إدارة المستخدمين</h4>
+
+<div class="table-responsive">
+    <table class="table table-hover table-sm">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>المعرف</th>
+                <th>الاسم</th>
+                <th>الإيميل</th>
+                <th>الهاتف</th>
+                <th>المستوى</th>
+                <th>نقاط XP</th>
+                <th>الحالة</th>
+                <th>كلمة المرور (مشفرة)</th>
+                <th>الإجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.student_id }}</td>
+                <td>{{ u.full_name }}</td>
+                <td>{{ u.email }}</td>
+                <td>{{ u.phone or '-' }}</td>
+                <td>{{ u.level }}</td>
+                <td>{{ u.xp_points }}</td>
+                <td>{% if u.is_banned %}<span class="badge bg-danger">محظور</span>{% else %}<span class="badge bg-success">نشط</span>{% endif %}</td>
+                <td>
+                    <span class="text-muted small" style="font-size: 11px; word-break: break-all; max-width: 150px; display: inline-block;">
+                        {{ u.password_hash[:30] }}...
+                    </span>
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_toggle_ban', user_id=u.id) }}" style="display:inline;">
+                        <button class="btn btn-sm {% if u.is_banned %}btn-outline-success{% else %}btn-outline-danger{% endif %}" {% if u.is_admin %}disabled{% endif %}>
+                            {% if u.is_banned %}فك{% else %}حظر{% endif %}
+                        </button>
+                    </form>
+                    {% if not u.is_admin %}
+                    <form method="POST" action="{{ url_for('admin_toggle_admin', user_id=u.id) }}" style="display:inline;">
+                        <button class="btn btn-sm btn-outline-primary">{% if u.is_admin %}سحب{% else %}رفع{% endif %} أدمن</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline;" onsubmit="return confirm('حذف المستخدم نهائياً؟')">
+                        <button class="btn btn-sm btn-outline-danger">حذف</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="alert alert-info mt-3">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>ملاحظة:</strong> كلمة المرور مشفرة (Hash) ولا يمكن فك تشفيرها. هذه هي الطريقة الآمنة لتخزين كلمات المرور.
+</div>
+{% endblock %}
