@@ -1,5 +1,5 @@
 import os, json, time, shutil
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort, send_from_directory, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
 from flask_socketio import SocketIO, emit
@@ -91,6 +91,7 @@ class TestResult(db.Model):
     total_questions = db.Column(db.Integer, nullable=False)
     answers = db.Column(db.Text, default='')
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    test_type = db.Column(db.String(20), default='random')
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -178,43 +179,47 @@ def seed_database():
             db.session.add(Lesson(title=title, content=content, order=order))
 
     questions = [
-        ('ما المكون المسؤول عن معالجة البيانات؟', 'mcq', 'المعالج', 'الذاكرة', 'القرص الصلب', 'الشاشة', 'a'),
-        ('أي مما يلي وحدة إدخال؟', 'mcq', 'الشاشة', 'الطابعة', 'الفأرة', 'السماعات', 'c'),
-        ('لإعادة تسمية ملف نضغط', 'mcq', 'F2', 'F3', 'F4', 'F5', 'a'),
-        ('Windows+E يفتح', 'mcq', 'المستندات', 'مستكشف الملفات', 'الإعدادات', 'الطابعة', 'b'),
-        ('لتحديد الكل نضغط', 'mcq', 'Ctrl+A', 'Ctrl+C', 'Ctrl+V', 'Ctrl+X', 'a'),
-        ('RAM تعني ذاكرة الوصول العشوائي', 'tf', None, None, None, None, 't'),
-        ('Ctrl+Z للتراجع', 'tf', None, None, None, None, 't'),
-        ('لحفظ ملف نضغط Ctrl+S', 'tf', None, None, None, None, 't'),
-        ('امتداد العروض التقديمية هو .docx', 'tf', None, None, None, None, 'f'),
-        ('وورد من برامج النظام', 'tf', None, None, None, None, 'f'),
-        ('لنسخ ملف نستخدم قص', 'tf', None, None, None, None, 'f'),
-        ('الأيقونة هي صورة تمثل برنامج', 'tf', None, None, None, None, 't'),
-        ('القرص الصلب SSD أسرع من HDD', 'tf', None, None, None, None, 't'),
-        ('الطابعة وحدة إدخال', 'tf', None, None, None, None, 'f'),
-        ('السماعات وحدة إخراج', 'tf', None, None, None, None, 't'),
-        ('القرص الصلب وحدة تخزين', 'tf', None, None, None, None, 't'),
-        ('Ctrl+V لصق', 'tf', None, None, None, None, 't'),
-        ('Ctrl+X قص', 'tf', None, None, None, None, 't'),
-        ('امتداد الوورد .pptx', 'tf', None, None, None, None, 'f'),
-        ('امتداد الإكسل .xlsx', 'tf', None, None, None, None, 't'),
-        ('يمكن إدراج صورة في وورد', 'tf', None, None, None, None, 't'),
-        ('يستخدم باوربوينت للعروض', 'tf', None, None, None, None, 't'),
-        ('SUM دالة جمع في إكسل', 'tf', None, None, None, None, 't'),
-        ('F5 بدء عرض باوربوينت', 'tf', None, None, None, None, 't'),
-        ('الحاسوب المحمول يسمى لابتوب', 'tf', None, None, None, None, 't'),
-        ('الخادم حاسوب عملاق', 'tf', None, None, None, None, 'f'),
-        ('الماوس وحدة إخراج', 'tf', None, None, None, None, 'f'),
-        ('الميكروفون وحدة إدخال', 'tf', None, None, None, None, 't'),
-        ('الشاشة وحدة إخراج', 'tf', None, None, None, None, 't'),
-        ('الفلاش ميموري وحدة تخزين', 'tf', None, None, None, None, 't'),
+        ('ما هو الهدف من السلامة المهنية؟', 'mcq', 'حماية العاملين', 'زيادة الإنتاج', 'خفض التكاليف', 'كل ما سبق', 'a', 1),
+        ('كم مرة يجب أخذ استراحة عند استخدام الحاسوب؟', 'mcq', 'كل ساعة', 'كل 30 دقيقة', 'كل 10 دقائق', 'عند الحاجة', 'b', 1),
+        ('السلامة المهنية مهمة للحفاظ على صحة المستخدم.', 'tf', None, None, None, None, 't', 1),
+        ('أي من هذه يعتبر حاسوباً شخصياً؟', 'mcq', 'Server', 'Tablet', 'Desktop', 'Supercomputer', 'c', 2),
+        ('الكمبيوتر المحمول يسمى Laptop.', 'tf', None, None, None, None, 't', 2),
+        ('الخادم هو حاسوب عملاق.', 'tf', None, None, None, None, 'f', 2),
+        ('أي مما يلي وحدة إدخال؟', 'mcq', 'الشاشة', 'الطابعة', 'الفأرة', 'السماعات', 'c', 3),
+        ('وحدة المعالجة المركزية تسمى CPU.', 'tf', None, None, None, None, 't', 3),
+        ('الذاكرة RAM تفقد بياناتها عند إطفاء الجهاز.', 'tf', None, None, None, None, 't', 3),
+        ('لإعادة تسمية ملف نضغط:', 'mcq', 'F2', 'F3', 'F4', 'F5', 'a', 4),
+        ('Ctrl+Z للتراجع.', 'tf', None, None, None, None, 't', 4),
+        ('لحفظ ملف نضغط Ctrl+S.', 'tf', None, None, None, None, 't', 4),
+        ('Windows+E يفتح:', 'mcq', 'المستندات', 'مستكشف الملفات', 'الإعدادات', 'الطابعة', 'b', 5),
+        ('لتحديد الكل نضغط Ctrl+A.', 'tf', None, None, None, None, 't', 5),
+        ('سطح المكتب هو الشاشة الرئيسية.', 'tf', None, None, None, None, 't', 5),
+        ('لنسخ ملف نستخدم:', 'mcq', 'قص', 'نسخ', 'حذف', 'إعادة تسمية', 'b', 6),
+        ('سلة المحذوفات تحذف الملفات نهائياً.', 'tf', None, None, None, None, 'f', 6),
+        ('يمكن استعادة ملف من سلة المحذوفات.', 'tf', None, None, None, None, 't', 6),
+        ('برنامج الرسام يستخدم للرسم.', 'tf', None, None, None, None, 't', 7),
+        ('المفكرة تدعم التنسيق.', 'tf', None, None, None, None, 'f', 7),
+        ('أداة القصاصة تلتقط صور الشاشة.', 'tf', None, None, None, None, 't', 7),
+        ('لتثبيت برنامج، نفتح ملف .exe.', 'tf', None, None, None, None, 't', 8),
+        ('لإزالة برنامج نذهب إلى لوحة التحكم.', 'tf', None, None, None, None, 't', 8),
+        ('يجب تحميل البرامج من مواقع غير رسمية.', 'tf', None, None, None, None, 'f', 8),
+        ('في وورد، Ctrl+B يجعل الخط غامقاً.', 'tf', None, None, None, None, 't', 9),
+        ('يمكن إدراج صورة في وورد.', 'tf', None, None, None, None, 't', 9),
+        ('امتداد الوورد هو .pptx.', 'tf', None, None, None, None, 'f', 9),
+        ('يستخدم باوربوينت للعروض التقديمية.', 'tf', None, None, None, None, 't', 10),
+        ('F5 يبدأ عرض الشرائح.', 'tf', None, None, None, None, 't', 10),
+        ('الحركات في باوربوينت تكون بين الشرائح فقط.', 'tf', None, None, None, None, 'f', 10),
+        ('SUM دالة جمع في إكسل.', 'tf', None, None, None, None, 't', 11),
+        ('امتداد الإكسل هو .xlsx.', 'tf', None, None, None, None, 't', 11),
+        ('الخلية A1 هي تقاطع العمود A والصف 1.', 'tf', None, None, None, None, 't', 11),
+        ('يجب مراجعة جميع الدروس قبل الاختبار.', 'tf', None, None, None, None, 't', 12),
+        ('يمكن إعادة الاختبار أكثر من مرة.', 'tf', None, None, None, None, 't', 12),
+        ('النجاح من 50%.', 'tf', None, None, None, None, 'f', 12),
     ]
-
     for q in questions:
-        if len(q) == 7:
-            text, qtype, a, b, c, d, ans = q
-            if not Question.query.filter_by(question_text=text).first():
-                db.session.add(Question(question_text=text, question_type=qtype, option_a=a, option_b=b, option_c=c, option_d=d, correct_answer=ans))
+        text, qtype, a, b, c, d, ans, lid = q
+        if not Question.query.filter_by(question_text=text).first():
+            db.session.add(Question(question_text=text, question_type=qtype, option_a=a, option_b=b, option_c=c, option_d=d, correct_answer=ans, lesson_id=lid))
 
     achievements = [
         ('بداية الرحلة', 'سجل في الموقع', '🎉', 'account_created', 1),
@@ -368,31 +373,121 @@ def lesson_detail(lesson_id):
     next_lesson = Lesson.query.filter(Lesson.order > lesson.order).order_by(Lesson.order.asc()).first()
     return render_template('lesson_detail.html', lesson=lesson, prev=prev_lesson, next=next_lesson)
 
+# ---------- صفحة أنواع الاختبارات (مضمنة مباشرة) ----------
+@app.route('/tests')
+@login_required
+def tests():
+    lessons = Lesson.query.order_by(Lesson.order).all()
+    html = '''
+    {% extends "base.html" %}
+    {% block content %}
+    <h2>📝 الاختبارات</h2>
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>🎲 اختبار عشوائي شامل</h5>
+                    <p>30 سؤالاً من جميع الدروس<br>الوقت: 30 دقيقة</p>
+                    <a href="/test" class="btn btn-primary">ابدأ</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>⚡ اختبار سرعة</h5>
+                    <p>30 سؤالاً عشوائياً<br>الوقت: 10 دقائق فقط</p>
+                    <a href="/test/speed" class="btn btn-warning">ابدأ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <h4 class="mt-5">📚 اختبارات حسب الموضوع</h4>
+    <div class="row">
+    '''
+    for lesson in lessons:
+        html += f'''
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6>{lesson.order}. {lesson.title}</h6>
+                    <a href="/test/subject/{lesson.id}" class="btn btn-outline-success btn-sm">اختبار هذا الدرس</a>
+                </div>
+            </div>
+        </div>
+        '''
+    html += '</div>{% endblock %}'
+    return render_template_string(html, lessons=lessons)
+
+# ---------- الاختبار حسب الموضوع ----------
+@app.route('/test/subject/<int:lesson_id>')
+@login_required
+def test_subject_start(lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    questions = Question.query.filter_by(lesson_id=lesson_id).order_by(db.func.random()).all()
+    if len(questions) == 0:
+        flash('لا توجد أسئلة لهذا الدرس بعد.', 'warning')
+        return redirect(url_for('tests'))
+    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
+    session['current_q_index'] = 0
+    session['score'] = 0
+    session['answers'] = []
+    session['test_type'] = 'subject'
+    session['test_start_time'] = time.time()
+    session['test_total_time'] = len(questions) * 60
+    return redirect(url_for('test_question'))
+
+# ---------- اختبار السرعة ----------
+@app.route('/test/speed')
+@login_required
+def test_speed_start():
+    questions = Question.query.order_by(db.func.random()).limit(30).all()
+    if len(questions) == 0:
+        flash('لا توجد أسئلة.', 'warning')
+        return redirect(url_for('tests'))
+    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
+    session['current_q_index'] = 0
+    session['score'] = 0
+    session['answers'] = []
+    session['test_type'] = 'speed'
+    session['test_start_time'] = time.time()
+    session['test_total_time'] = 600
+    return redirect(url_for('test_question'))
+
+# ---------- الاختبار العشوائي الشامل ----------
 @app.route('/test')
 @login_required
 def test_start():
     questions = Question.query.order_by(db.func.random()).limit(30).all()
-    if len(questions) < 30:
-        questions = Question.query.order_by(db.func.random()).all()
-    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions[:30]]
+    if len(questions) == 0:
+        flash('لا توجد أسئلة.', 'warning')
+        return redirect(url_for('tests'))
+    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
     session['current_q_index'] = 0
     session['score'] = 0
     session['answers'] = []
+    session['test_type'] = 'random'
     session['test_start_time'] = time.time()
+    session['test_total_time'] = 30 * 60
     return redirect(url_for('test_question'))
 
+# ---------- دوال الاختبار المشتركة ----------
 @app.route('/test/question')
 @login_required
 def test_question():
     ids = session.get('test_questions')
-    if not ids: return redirect(url_for('test_start'))
+    if not ids: return redirect(url_for('tests'))
     idx = session.get('current_q_index', 0)
     if idx >= len(ids): return redirect(url_for('test_result'))
     qdata = ids[idx]
     question = Question.query.get(qdata['id'])
     elapsed = time.time() - session.get('test_start_time', time.time())
-    remaining = max(0, 30*60 - int(elapsed))
-    return render_template('test.html', question=question, index=idx+1, total=len(ids), remaining=remaining)
+    total_time = session.get('test_total_time', 30*60)
+    remaining = max(0, total_time - int(elapsed))
+    test_type = session.get('test_type', 'random')
+    lesson = Lesson.query.get(question.lesson_id) if question.lesson_id else None
+    return render_template('test.html', question=question, index=idx+1, total=len(ids),
+                           remaining=remaining, test_type=test_type, lesson=lesson)
 
 @app.route('/test/answer', methods=['POST'])
 @login_required
@@ -419,7 +514,9 @@ def test_result():
     total = len(ids)
     percentage = (score / total * 100) if total > 0 else 0
     answers = session.get('answers', [])
-    result = TestResult(user_id=current_user.id, score=percentage, total_questions=total, answers=json.dumps(answers))
+    test_type = session.get('test_type', 'random')
+    result = TestResult(user_id=current_user.id, score=percentage, total_questions=total,
+                        answers=json.dumps(answers), test_type=test_type)
     db.session.add(result)
     current_user.level = get_arabic_rank(percentage)
     db.session.commit()
@@ -428,7 +525,10 @@ def test_result():
     session.pop('score', None)
     session.pop('answers', None)
     session.pop('test_start_time', None)
-    return render_template('test_result.html', score=score, total=total, percentage=percentage, answers=answers, result_id=result.id)
+    session.pop('test_total_time', None)
+    session.pop('test_type', None)
+    return render_template('test_result.html', score=score, total=total, percentage=percentage,
+                           answers=answers, result_id=result.id, test_type=test_type)
 
 @app.route('/statistics')
 @login_required
@@ -554,7 +654,8 @@ def add_question():
         question_text=request.form['question_text'], question_type=request.form.get('question_type','mcq'),
         option_a=request.form.get('option_a'), option_b=request.form.get('option_b'),
         option_c=request.form.get('option_c'), option_d=request.form.get('option_d'),
-        correct_answer=request.form['correct_answer']))
+        correct_answer=request.form['correct_answer'],
+        lesson_id=request.form.get('lesson_id', type=int)))
     db.session.commit()
     return redirect(url_for('admin_questions'))
 
@@ -562,8 +663,12 @@ def add_question():
 @admin_required
 def edit_question(id):
     q = Question.query.get_or_404(id)
-    for f in ['question_text','question_type','option_a','option_b','option_c','option_d','correct_answer']:
-        if f in request.form: setattr(q, f, request.form[f])
+    for f in ['question_text','question_type','option_a','option_b','option_c','option_d','correct_answer','lesson_id']:
+        if f in request.form:
+            val = request.form[f]
+            if f == 'lesson_id':
+                val = int(val) if val else None
+            setattr(q, f, val)
     db.session.commit()
     return redirect(url_for('admin_questions'))
 
@@ -686,15 +791,9 @@ def handle_message(data):
     sender_name = current_user.full_name if current_user.show_real_name else current_user.username
     sender_pic = current_user.profile_pic if current_user.profile_pic != 'default.png' else ''
     msg_data = {
-        'id': msg.id,
-        'sender_id': current_user.id,
-        'sender_name': sender_name,
-        'sender_pic': sender_pic,
-        'text': msg.text,
-        'timestamp': msg.timestamp.strftime('%H:%M'),
-        'reply_to': msg.reply_to_id,
-        'edited': False,
-        'file_path': None,
+        'id': msg.id, 'sender_id': current_user.id, 'sender_name': sender_name,
+        'sender_pic': sender_pic, 'text': msg.text, 'timestamp': msg.timestamp.strftime('%H:%M'),
+        'reply_to': msg.reply_to_id, 'edited': False, 'file_path': None,
         'recipient_id': msg.recipient_id
     }
     if recipient_id:
