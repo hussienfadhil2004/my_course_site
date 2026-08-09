@@ -1006,33 +1006,36 @@ def admin_questions():
 @admin_required
 def admin_delete_question(question_id):
     try:
-        # البحث عن السؤال
+        # 1. البحث عن السؤال
         q = Question.query.get(question_id)
         if not q:
             flash('السؤال غير موجود.', 'danger')
             return redirect(url_for('admin_questions'))
-        
-        # حفظ معلومات السؤال للتسجيل
+
+        # 2. حذف جميع الإجابات المرتبطة بهذا السؤال أولاً (لتجنب مشكلة المفتاح الخارجي)
+        UserAnswer.query.filter_by(question_id=q.id).delete()
+
+        # 3. حفظ معلومات السؤال للتسجيل
         question_text = q.question_text[:50]
         lesson_title = q.lesson.title if q.lesson else 'بدون درس'
-        
-        # حذف السؤال
+
+        # 4. حذف السؤال
         db.session.delete(q)
         db.session.commit()
-        
-        # تسجيل النشاط (مع تجنب الأخطاء)
+
+        # 5. تسجيل النشاط (مع تجنب الأخطاء)
         try:
             log_activity(current_user.id, f'حذف سؤالاً: "{question_text}" من درس "{lesson_title}"')
         except Exception as log_err:
             print(f"⚠️ فشل تسجيل النشاط: {log_err}")
             db.session.rollback()
-        
-        flash('✅ تم حذف السؤال بنجاح.', 'success')
-        
+
+        flash('✅ تم حذف السؤال وجميع إجاباته المرتبطة بنجاح.', 'success')
+
     except Exception as e:
         db.session.rollback()
         flash(f'❌ حدث خطأ أثناء حذف السؤال: {str(e)}', 'danger')
-    
+
     return redirect(url_for('admin_questions'))
 
 @app.route('/admin/announcements', methods=['GET', 'POST'])
@@ -1109,12 +1112,12 @@ def admin_reset_db():
     try:
         db.drop_all()
         db.create_all()
-        
+
         admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
         admin.set_password('admin123')
         db.session.add(admin)
         db.session.commit()
-        
+
         # إنشاء التصنيفات
         categories_data = [
             {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
@@ -1123,14 +1126,14 @@ def admin_reset_db():
             {'name': 'برامج النظام', 'description': 'تعلم استخدام برامج الكمبيوتر الأساسية', 'icon': 'fa-desktop', 'order': 4},
             {'name': 'شبكات الحاسوب', 'description': 'أساسيات الشبكات والاتصالات', 'icon': 'fa-network-wired', 'order': 5},
         ]
-        
+
         created_categories = {}
         for cat_data in categories_data:
             cat = Category(**cat_data)
             db.session.add(cat)
             db.session.flush()
             created_categories[cat_data['name']] = cat.id
-        
+
         # إنشاء الدروس
         lessons_data = [
             {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
@@ -1149,7 +1152,7 @@ def admin_reset_db():
              'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون.</p>',
              'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
         ]
-        
+
         lesson_ids = {}
         for lesson_data in lessons_data:
             cat_name = lesson_data.pop('category')
@@ -1165,7 +1168,7 @@ def admin_reset_db():
             db.session.add(lesson)
             db.session.flush()
             lesson_ids[lesson_data['title']] = lesson.id
-        
+
         # إنشاء الأسئلة
         questions_data = [
             {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
@@ -1186,7 +1189,7 @@ def admin_reset_db():
              'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
              'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
         ]
-        
+
         for q in questions_data:
             lesson_title = q.pop('lesson')
             question = Question(
@@ -1201,7 +1204,7 @@ def admin_reset_db():
                 difficulty=q['difficulty']
             )
             db.session.add(question)
-        
+
         db.session.commit()
         log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس جديدة')
         flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
@@ -1215,14 +1218,14 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         upgrade_database()
-        
+
         if not User.query.filter_by(email='admin@mycourse.com').first():
             admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
             print("✅ Admin: admin@mycourse.com / admin123")
-        
+
         if Category.query.count() == 0:
             print("⚠️ لا توجد تصنيفات. جاري إنشاء تصنيفات افتراضية...")
             categories = [
@@ -1234,7 +1237,7 @@ if __name__ == '__main__':
             db.session.add_all(categories)
             db.session.commit()
             print("✅ تم إنشاء تصنيفات افتراضية.")
-            
+
             if Lesson.query.count() == 0:
                 cat = Category.query.filter_by(name='برامج النظام').first()
                 if cat:
@@ -1247,6 +1250,6 @@ if __name__ == '__main__':
                     db.session.add_all(lessons)
                     db.session.commit()
                     print("✅ تم إنشاء دروس افتراضية لبرامج النظام.")
-    
+
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
