@@ -2,6 +2,7 @@ import os
 import json
 import random
 import math
+import io
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -12,10 +13,9 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from fpdf import FPDF
 from sqlalchemy import inspect, text
-import io
 
 load_dotenv()
 
@@ -35,6 +35,7 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('static/css', exist_ok=True)
 os.makedirs('static/js', exist_ok=True)
+os.makedirs('static/default_avatars', exist_ok=True)
 
 # ==================== قاعدة البيانات ====================
 db = SQLAlchemy(app)
@@ -52,6 +53,87 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
+
+# ==================== دوال إنشاء الصورة الافتراضية ====================
+def generate_default_avatar(name, user_id, size=200):
+    """إنشاء صورة افتراضية من أول حرف من الاسم"""
+    try:
+        # الحصول على أول حرف من الاسم
+        first_letter = name.strip()[0].upper() if name else '?'
+        
+        # قائمة ألوان خلفية عشوائية (ألوان مشرقة)
+        colors = [
+            (231, 76, 60), (46, 204, 113), (52, 152, 219), (155, 89, 182),
+            (241, 196, 15), (230, 126, 34), (26, 188, 156), (211, 84, 0),
+            (142, 68, 173), (41, 128, 185), (39, 174, 96), (192, 57, 43)
+        ]
+        
+        # اختيار لون بناءً على اسم المستخدم (لتثبيت اللون لنفس المستخدم)
+        color_index = sum(ord(c) for c in name) % len(colors)
+        bg_color = colors[color_index]
+        
+        # إنشاء صورة جديدة
+        img = Image.new('RGB', (size, size), bg_color)
+        draw = ImageDraw.Draw(img)
+        
+        # رسم دائرة بيضاء كحدود
+        border_width = 4
+        draw.ellipse([border_width, border_width, size-border_width, size-border_width], outline=(255, 255, 255), width=border_width)
+        
+        # رسم الحرف في المنتصف
+        try:
+            # محاولة استخدام خط النظام
+            font_size = int(size * 0.6)
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            # إذا لم يتوفر الخط، استخدم الخط الافتراضي
+            font = ImageFont.load_default()
+            font_size = int(size * 0.5)
+        
+        # حساب موضع الحرف في المنتصف
+        bbox = draw.textbbox((0, 0), first_letter, font=font) if hasattr(draw, 'textbbox') else None
+        if bbox:
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+        else:
+            text_width = int(size * 0.4)
+            text_height = int(size * 0.6)
+        
+        x = (size - text_width) // 2
+        y = (size - text_height) // 2
+        
+        # رسم الحرف
+        draw.text((x, y), first_letter, fill=(255, 255, 255), font=font)
+        
+        # حفظ الصورة
+        filename = f"avatar_{user_id}.png"
+        filepath = os.path.join('static/default_avatars', filename)
+        img.save(filepath, 'PNG')
+        
+        return f"default_avatars/{filename}"
+    except Exception as e:
+        print(f"⚠️ فشل إنشاء الصورة الافتراضية: {e}")
+        return 'default.png'
+
+def create_default_avatar_for_user(user):
+    """إنشاء صورة افتراضية لمستخدم محدد"""
+    avatar_path = generate_default_avatar(user.full_name, user.id)
+    user.profile_pic = avatar_path
+    db.session.commit()
+    return avatar_path
+
+def create_default_avatars_for_all_users():
+    """إنشاء صور افتراضية لجميع المستخدمين الذين ليس لديهم صورة"""
+    users = User.query.filter(
+        (User.profile_pic == 'default.png') | 
+        (User.profile_pic == None) |
+        (User.profile_pic == '')
+    ).all()
+    
+    for user in users:
+        create_default_avatar_for_user(user)
+    
+    return len(users)
 
 # ==================== دالة ترقية قاعدة البيانات ====================
 def upgrade_database():
@@ -288,63 +370,46 @@ def log_activity(user_id, action, ip=None):
 def add_default_questions():
     """إضافة الأسئلة المحددة مسبقاً لكل درس إذا لم تكن موجودة"""
     questions_data = [
-        # الدرس الأول: السلامة المهنية للحاسوب
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'من قواعد السلامة المهنية، يجب أن تكون عيناك في مستوى الجزء العلوي من الشاشة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'MCQ', 'question_text': 'ما هي قاعدة 20-20-20 التي تحمي العينين؟', 'option_a': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'option_b': 'كل 20 ساعة، انظر إلى شيء يبعد 20 متراً لمدة 20 دقيقة', 'option_c': 'كل 20 دقيقة، أغمض عينيك لمدة 20 ثانية', 'option_d': 'كل 20 دقيقة، اشرب 20 مل من الماء', 'correct_answer': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'difficulty': 'easy'},
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'لا بأس بوضع المشروبات بجانب الحاسوب طالما أن الكوب مغلق جيداً.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد سلوكاً صحيحاً للحفاظ على السلامة الكهربائية؟', 'option_a': 'سحب السلك من الوسط لفصل الجهاز', 'option_b': 'استخدام واقي صدمات (مشترك كهربائي مزود بفيوز)', 'option_c': 'تغطية فتحات التهوية لمنع دخول الغبار', 'option_d': 'استخدام أي مشترك كهربائي بغض النظر عن جودته', 'correct_answer': 'استخدام واقي صدمات (مشترك كهربائي مزود بفيوز)', 'difficulty': 'easy'},
         {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'يجب مشاركة كلمة مرور جهازك مع زملائك لتسهيل العمل.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
-
-        # الدرس الثاني: تعريف الحاسوب
         {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'ما هو تعريف الحاسوب؟', 'option_a': 'جهاز إلكتروني يستقبل البيانات ويعالجها ويخرج النتائج', 'option_b': 'جهاز ميكانيكي للطباعة', 'option_c': 'برنامج لإدارة الملفات', 'option_d': 'جهاز لتشغيل الفيديوهات فقط', 'correct_answer': 'جهاز إلكتروني يستقبل البيانات ويعالجها ويخرج النتائج', 'difficulty': 'easy'},
         {'lesson_title': 'تعريف الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'الذاكرة العشوائية (RAM) تحتفظ بالبيانات حتى بعد إيقاف تشغيل الحاسوب.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
         {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد من أجهزة الإخراج؟', 'option_a': 'لوحة المفاتيح', 'option_b': 'الفأرة', 'option_c': 'الشاشة', 'option_d': 'الميكروفون', 'correct_answer': 'الشاشة', 'difficulty': 'easy'},
         {'lesson_title': 'تعريف الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'نظام التشغيل (مثل ويندوز) يُصنف ضمن برمجيات التطبيقات.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
         {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'ما هي المكونات الثلاثة الأساسية لعمل الحاسوب؟', 'option_a': 'الإدخال، المعالجة، الإخراج', 'option_b': 'الشاشة، الفأرة، الطابعة', 'option_c': 'البرامج، الألعاب، الإنترنت', 'option_d': 'المعالج، الذاكرة، القرص الصلب', 'correct_answer': 'الإدخال، المعالجة، الإخراج', 'difficulty': 'easy'},
-
-        # الدرس الثالث: مكونات الحاسوب
         {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعتبر "عقل" الحاسوب؟', 'option_a': 'اللوحة الأم', 'option_b': 'وحدة المعالجة المركزية (المعالج)', 'option_c': 'الذاكرة العشوائية', 'option_d': 'القرص الصلب', 'correct_answer': 'وحدة المعالجة المركزية (المعالج)', 'difficulty': 'easy'},
         {'lesson_title': 'مكونات الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'الـ SSD أسرع من الـ HDD في تخزين البيانات.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد جهاز إدخال؟', 'option_a': 'الشاشة', 'option_b': 'الطابعة', 'option_c': 'الفأرة', 'option_d': 'السماعات', 'correct_answer': 'الفأرة', 'difficulty': 'easy'},
         {'lesson_title': 'مكونات الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'اللوحة الأم هي المسؤولة عن توصيل جميع مكونات الحاسوب ببعضها البعض.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'ما هي وظيفة بطاقة الرسوميات (GPU)؟', 'option_a': 'معالجة وعرض الصور والفيديوهات', 'option_b': 'تخزين الملفات', 'option_c': 'إدارة الاتصال بالإنترنت', 'option_d': 'تشغيل نظام التشغيل', 'correct_answer': 'معالجة وعرض الصور والفيديوهات', 'difficulty': 'easy'},
-
-        # الدرس الرابع: استخدام الماوس ولوحة المفاتيح
         {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو اختصار "نسخ" في لوحة المفاتيح؟', 'option_a': 'Ctrl + C', 'option_b': 'Ctrl + V', 'option_c': 'Ctrl + X', 'option_d': 'Ctrl + Z', 'correct_answer': 'Ctrl + C', 'difficulty': 'easy'},
         {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'TRUE_FALSE', 'question_text': 'النقر المزدوج (Double-click) يستخدم عادة لفتح الملفات والبرامج.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو اختصار "لصق" في لوحة المفاتيح؟', 'option_a': 'Ctrl + C', 'option_b': 'Ctrl + V', 'option_c': 'Ctrl + X', 'option_d': 'Ctrl + Z', 'correct_answer': 'Ctrl + V', 'difficulty': 'easy'},
         {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'TRUE_FALSE', 'question_text': 'مفتاح (Caps Lock) يستخدم لكتابة الحروف الكبيرة بشكل مؤقت عند الضغط عليه مع الحرف.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
         {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو استخدام الزر الأيمن للماوس؟', 'option_a': 'لتحديد العنصر', 'option_b': 'لفتح الملفات', 'option_c': 'لعرض القائمة المنسدلة للخيارات', 'option_d': 'لسحب العنصر', 'correct_answer': 'لعرض القائمة المنسدلة للخيارات', 'difficulty': 'easy'},
-
-        # الدرس الخامس: سطح المكتب وشريط المهام
         {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'أين يقع زر "ابدأ" (Start) عادةً؟', 'option_a': 'في منتصف الشاشة', 'option_b': 'في أقصى يسار شريط المهام', 'option_c': 'في أقصى يمين شريط المهام', 'option_d': 'في أعلى الشاشة', 'correct_answer': 'في أقصى يسار شريط المهام', 'difficulty': 'easy'},
         {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك تصغير النافذة إلى شريط المهام دون إغلاق البرنامج.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'ما هي سلة المحذوفات (Recycle Bin)؟', 'option_a': 'مكان تخزين الملفات المحذوفة مؤقتاً', 'option_b': 'مكان تخزين الملفات المهمة', 'option_c': 'برنامج لحذف الملفات نهائياً', 'option_d': 'مجلد لتثبيت البرامج', 'correct_answer': 'مكان تخزين الملفات المحذوفة مؤقتاً', 'difficulty': 'easy'},
         {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك تغيير خلفية سطح المكتب (الورق الحائط) حسب رغبتك.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'ما هو اختصار التبديل بين البرامج المفتوحة؟', 'option_a': 'Alt + Tab', 'option_b': 'Ctrl + Tab', 'option_c': 'Alt + F4', 'option_d': 'Ctrl + Alt + Delete', 'correct_answer': 'Alt + Tab', 'difficulty': 'easy'},
-
-        # الدرس السادس: إدارة الملفات
         {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك نقل ملف من مجلد إلى آخر باستخدام قص (Ctrl + X) ولصق (Ctrl + V).', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'إدارة الملفات', 'type': 'MCQ', 'question_text': 'ما هو اختصار إنشاء مجلد جديد؟', 'option_a': 'Ctrl + N', 'option_b': 'Ctrl + Shift + N', 'option_c': 'Alt + N', 'option_d': 'Ctrl + F', 'correct_answer': 'Ctrl + Shift + N', 'difficulty': 'easy'},
         {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'الملفات المحذوفة تذهب إلى سلة المحذوفات ويمكن استعادتها.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'إدارة الملفات', 'type': 'MCQ', 'question_text': 'ما هو اختصار إعادة تسمية ملف أو مجلد؟', 'option_a': 'Ctrl + R', 'option_b': 'F2', 'option_c': 'Alt + R', 'option_d': 'Shift + R', 'correct_answer': 'F2', 'difficulty': 'easy'},
         {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'يجب ترك جميع الملفات على سطح المكتب لتسهيل الوصول إليها.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
-
-        # الدرس السابع: برامج النظام
         {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لالتقاط صورة للشاشة؟', 'option_a': 'برنامج الدفتر', 'option_b': 'أداة القصاص (Snipping Tool)', 'option_c': 'برنامج الرسام', 'option_d': 'مسجل الصوت', 'correct_answer': 'أداة القصاص (Snipping Tool)', 'difficulty': 'easy'},
         {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'TRUE_FALSE', 'question_text': 'برنامج الدفتر (Notepad) يدعم تنسيق النصوص بالألوان والخطوط المختلفة.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
         {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لتسجيل الصوت عبر الميكروفون؟', 'option_a': 'برنامج الرسام', 'option_b': 'برنامج الملاحظات اللاصقة', 'option_c': 'مسجل الصوت (Voice Recorder)', 'option_d': 'أداة القصاص', 'correct_answer': 'مسجل الصوت (Voice Recorder)', 'difficulty': 'easy'},
         {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'TRUE_FALSE', 'question_text': 'يمكن استخدام برنامج الملاحظات اللاصقة (Sticky Notes) لتدوين التذكيرات السريعة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'ما هو امتداد الملف الذي يحفظ به برنامج الرسام (Paint) الصورة بشكل شائع؟', 'option_a': '.txt', 'option_b': '.mp3', 'option_c': '.png أو .jpg', 'option_d': '.docx', 'correct_answer': '.png أو .jpg', 'difficulty': 'easy'},
-
-        # الدرس الثامن: تنزيل التطبيقات وتثبيتها وإزالتها
         {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد مصدراً آمناً لتحميل البرامج؟', 'option_a': 'موقع مجهول من الإنترنت', 'option_b': 'الموقع الرسمي للبرنامج', 'option_c': 'رابط من بريد إلكتروني غير معروف', 'option_d': 'إعلان منبثق على الإنترنت', 'correct_answer': 'الموقع الرسمي للبرنامج', 'difficulty': 'easy'},
         {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'TRUE_FALSE', 'question_text': 'ملفات التثبيت عادةً ما يكون امتدادها .exe أو .msi.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'كيف يمكن إزالة (حذف) برنامج من جهازك؟', 'option_a': 'حذف أيقونته من سطح المكتب', 'option_b': 'استخدام الإعدادات ← التطبيقات والميزات ← إلغاء التثبيت', 'option_c': 'حذف مجلد البرنامج من القرص الصلب', 'option_d': 'إعادة تشغيل الحاسوب', 'correct_answer': 'استخدام الإعدادات ← التطبيقات والميزات ← إلغاء التثبيت', 'difficulty': 'easy'},
         {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'TRUE_FALSE', 'question_text': 'تطبيقات المتجر (Microsoft Store) آمنة بشكل عام لأنها تأتي من مصدر رسمي.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'ما الذي يجب عليك فعله قبل تثبيت برنامج من الإنترنت؟', 'option_a': 'فحص الملف ببرنامج الحماية', 'option_b': 'إغلاق جميع البرامج المفتوحة', 'option_c': 'تشغيل الفيديو أولاً', 'option_d': 'طباعة الملف', 'correct_answer': 'فحص الملف ببرنامج الحماية', 'difficulty': 'easy'},
-
-        # الدرس التاسع: مايكروسوفت وورد
         {'lesson_title': 'مايكروسوفت وورد', 'type': 'MCQ', 'question_text': 'ما هو اختصار حفظ الملف في وورد؟', 'option_a': 'Ctrl + S', 'option_b': 'Ctrl + O', 'option_c': 'Ctrl + N', 'option_d': 'Ctrl + P', 'correct_answer': 'Ctrl + S', 'difficulty': 'easy'},
         {'lesson_title': 'مايكروسوفت وورد', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك إدراج صور وجداول في مستند وورد.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
         {'lesson_title': 'مايكروسوفت وورد', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لتحديد النص وتظليله؟', 'option_a': 'النقر بالماوس مع السحب', 'option_b': 'الضغط على Ctrl + A', 'option_c': 'الضغط على Ctrl + C', 'option_d': 'النقر بالماوس الأيمن', 'correct_answer': 'النقر بالماوس مع السحب', 'difficulty': 'easy'},
@@ -361,7 +426,6 @@ def add_default_questions():
             print(f"⚠️ الدرس '{lesson_title}' غير موجود، تخطي السؤال: {q_data['question_text'][:30]}...")
             skipped += 1
             continue
-        # التحقق من عدم وجود السؤال مكرراً (نفس النص ونفس الدرس)
         existing = Question.query.filter_by(lesson_id=lesson.id, question_text=q_data['question_text']).first()
         if existing:
             continue
@@ -424,6 +488,12 @@ def register():
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
+        
+        # إنشاء صورة افتراضية للمستخدم الجديد
+        avatar_path = generate_default_avatar(full_name, new_user.id)
+        new_user.profile_pic = avatar_path
+        db.session.commit()
+        
         log_activity(new_user.id, f'تسجيل حساب جديد: {new_user.student_id}')
         flash(f'تم إنشاء حسابك! معرفك: {new_user.student_id}', 'success')
         login_user(new_user, remember=True)
@@ -479,7 +549,7 @@ def profile():
             file = request.files['profile_pic']
             if file and file.filename != '':
                 if '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS:
-                    if current_user.profile_pic != 'default.png':
+                    if current_user.profile_pic != 'default.png' and not current_user.profile_pic.startswith('default_avatars/'):
                         old_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic)
                         if os.path.exists(old_path):
                             os.remove(old_path)
@@ -561,15 +631,19 @@ def lesson_detail(lesson_id):
 @login_required
 def complete_lesson(lesson_id):
     try:
-        lesson = Lesson.query.get_or_404(lesson_id)
-        
-        # البحث عن تقدم الدرس للمستخدم الحالي
+        # 1. التحقق من وجود الدرس في قاعدة البيانات أولاً
+        lesson = Lesson.query.get(lesson_id)
+        if not lesson:
+            flash('⚠️ الدرس المطلوب غير موجود في قاعدة البيانات.', 'danger')
+            return redirect(url_for('categories_list'))
+
+        # 2. البحث عن تقدم الدرس للمستخدم الحالي
         progress = LessonProgress.query.filter_by(
             user_id=current_user.id,
             lesson_id=lesson.id
         ).first()
         
-        # إذا لم يكن موجوداً، قم بإنشائه
+        # 3. إذا لم يكن موجوداً، قم بإنشائه
         if not progress:
             progress = LessonProgress(
                 user_id=current_user.id,
@@ -577,40 +651,39 @@ def complete_lesson(lesson_id):
                 is_completed=False
             )
             db.session.add(progress)
-            db.session.flush()  # للحصول على ID دون commit
+            db.session.flush()
         
-        # إذا كان مكتملاً بالفعل
+        # 4. إذا كان مكتملاً بالفعل
         if progress.is_completed:
             flash('الدرس مكتمل مسبقاً.', 'info')
             return redirect(url_for('lesson_detail', lesson_id=lesson.id))
         
-        # تحديث حالة الإكمال
+        # 5. تحديث حالة الإكمال
         progress.is_completed = True
         progress.completed_at = datetime.utcnow()
         
-        # إضافة نقاط الخبرة
+        # 6. إضافة نقاط الخبرة
         current_user.xp_points += 50
         
-        # ترقية المستوى إذا استوفى الشروط
+        # 7. ترقية المستوى إذا استوفى الشروط
         if current_user.xp_points >= current_user.level * 200:
             current_user.level += 1
             flash(f'🎉 مبروك! ترقيت إلى المستوى {current_user.level}!', 'success')
         
-        # حفظ جميع التغييرات
+        # 8. حفظ جميع التغييرات
         db.session.commit()
         
-        # تسجيل النشاط
+        # 9. تسجيل النشاط
         log_activity(current_user.id, f'أكمل الدرس: {lesson.title}')
         
         flash('✅ تم إكمال الدرس بنجاح!', 'success')
         
     except Exception as e:
         db.session.rollback()
-        # تسجيل الخطأ في سجلات السيرفر
         print(f"❌ خطأ في complete_lesson: {str(e)}")
         flash(f'❌ حدث خطأ أثناء إكمال الدرس: {str(e)}', 'danger')
     
-    return redirect(url_for('lesson_detail', lesson_id=lesson.id))
+    return redirect(url_for('lesson_detail', lesson_id=lesson_id))
 
 @app.route('/tests')
 @login_required
@@ -931,23 +1004,19 @@ def admin_delete_user(user_id):
     try:
         user = User.query.get_or_404(user_id)
 
-        # 1. منع حذف مسؤول آخر (وليس أنت)
         if user.is_admin and user.id != current_user.id:
             flash('⚠️ لا يمكنك حذف مسؤول آخر.', 'danger')
             return redirect(url_for('admin_users'))
 
-        # 2. حذف سجلات النشاط المرتبطة بالمستخدم أولاً (لتفادي مشكلة المفتاح الخارجي)
         ActivityLog.query.filter_by(user_id=user.id).delete()
 
-        # 3. إذا كنت تحذف حسابك الخاص (نفسك)
         if user.id == current_user.id:
-            logout_user()  # تسجيل الخروج أولاً
+            logout_user()
             db.session.delete(user)
             db.session.commit()
             flash('✅ تم حذف حسابك بنجاح.', 'success')
             return redirect(url_for('login'))
 
-        # 4. حذف مستخدم عادي (وليس أنت)
         db.session.delete(user)
         db.session.commit()
         log_activity(current_user.id, f'حذف المستخدم {user.student_id}')
@@ -1267,6 +1336,11 @@ def admin_reset_db():
         admin.set_password('admin123')
         db.session.add(admin)
         db.session.commit()
+        
+        # إنشاء صورة افتراضية للمسؤول
+        avatar_path = generate_default_avatar(admin.full_name, admin.id)
+        admin.profile_pic = avatar_path
+        db.session.commit()
 
         # إنشاء التصنيفات
         categories_data = [
@@ -1354,7 +1428,6 @@ def admin_reset_db():
             )
             db.session.add(question)
 
-        # إضافة الأسئلة الجديدة (الخاصة بالدروس 1-9)
         add_default_questions()
 
         db.session.commit()
@@ -1375,6 +1448,11 @@ if __name__ == '__main__':
             admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
             admin.set_password('admin123')
             db.session.add(admin)
+            db.session.commit()
+            
+            # إنشاء صورة افتراضية للمسؤول
+            avatar_path = generate_default_avatar(admin.full_name, admin.id)
+            admin.profile_pic = avatar_path
             db.session.commit()
             print("✅ Admin: admin@mycourse.com / admin123")
 
@@ -1402,8 +1480,17 @@ if __name__ == '__main__':
                     db.session.add_all(lessons)
                     db.session.commit()
                     print("✅ تم إنشاء دروس افتراضية لبرامج النظام.")
+            
+            # إنشاء صور افتراضية للمستخدمين الحاليين
+            print("🔄 جاري إنشاء صور افتراضية للمستخدمين...")
+            count = create_default_avatars_for_all_users()
+            print(f"✅ تم إنشاء {count} صورة افتراضية للمستخدمين.")
 
-        # إضافة الأسئلة الجديدة إذا لم تكن موجودة
+        # إنشاء صور افتراضية للمستخدمين الذين لا يملكون صوراً
+        count = create_default_avatars_for_all_users()
+        if count > 0:
+            print(f"✅ تم إنشاء {count} صورة افتراضية للمستخدمين الجدد.")
+
         add_default_questions()
 
     port = int(os.environ.get('PORT', 5000))
