@@ -1,63 +1,138 @@
 {% extends "base.html" %}
+
+{% block title %}اللوحة الرئيسية{% endblock %}
+
 {% block content %}
-<div class="hero-section text-center py-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 20px;">
-    <h1 class="display-4">💻 أتقن مهارات الحاسوب</h1>
-    <p class="lead">دورة تعليمية شاملة لتعلم أساسيات الحاسوب والبرامج المكتبية</p>
-    {% if not current_user.is_authenticated %}
-    <a href="/register" class="btn btn-light btn-lg me-2">🚀 ابدأ الآن مجاناً</a>
-    <a href="/guest" class="btn btn-outline-light btn-lg">👀 تصفح كضيف</a>
-    {% else %}
-    <a href="/lessons" class="btn btn-light btn-lg me-2">📚 الدروس</a>
-    <a href="/tests" class="btn btn-outline-light btn-lg me-2">📝 اختبارات</a>
-    <a href="/chat" class="btn btn-outline-light btn-lg">💬 المحادثة</a>
-    {% endif %}
-</div>
-
-<div class="row mt-5 text-center">
-    <div class="col-md-4">
-        <div class="card p-4">
-            <h2>📚</h2>
-            <h5>12 درساً شاملاً</h5>
-            <p>من السلامة المهنية إلى Excel</p>
-        </div>
+<!-- الترحيب -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold">👋 مرحباً، {{ user.full_name.split()[0] }}</h2>
+        <p class="text-muted">استمر في التقدم، أنت في المستوى {{ user.level }} 🚀</p>
     </div>
-    <div class="col-md-4">
-        <div class="card p-4">
-            <h2>📝</h2>
-            <h5>اختبارات تفاعلية</h5>
-            <p>مع نتيجة فورية وشهادة PDF</p>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card p-4">
-            <h2>💬</h2>
-            <h5>مجتمع تفاعلي</h5>
-            <p>محادثات عامة وخاصة مع الزملاء</p>
-        </div>
+    <div>
+        <span class="badge bg-primary p-2"><i class="fas fa-trophy me-1"></i> نقاط XP: {{ user.xp_points }}</span>
     </div>
 </div>
 
-{% if announcements %}
-<div class="mt-5">
-    <h3>📢 إعلانات هامة</h3>
-    {% for ann in announcements %}
-    <div class="alert alert-warning">{{ ann.title }} - {{ ann.content[:100] }}...</div>
-    {% endfor %}
+<!-- الإحصائيات السريعة -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm text-center p-3" style="background: linear-gradient(135deg, #e0e7ff, #f0f4ff);">
+            <h3 class="text-primary fw-bold">{{ completed_count }}</h3>
+            <p class="text-muted mb-0"><i class="fas fa-book me-1"></i> الدروس المكتملة</p>
+            <small class="text-muted">من أصل {{ total_lessons }}</small>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm text-center p-3" style="background: linear-gradient(135deg, #d1fae5, #ecfdf5);">
+            <h3 class="text-success fw-bold">{{ avg_score }}%</h3>
+            <p class="text-muted mb-0"><i class="fas fa-percent me-1"></i> متوسط الدرجات</p>
+            <small class="text-muted">آخر 5 محاولات</small>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm text-center p-3" style="background: linear-gradient(135deg, #fef3c7, #fffbeb);">
+            <h3 class="text-warning fw-bold">{{ user.badges|length }}</h3>
+            <p class="text-muted mb-0"><i class="fas fa-medal me-1"></i> الشارات</p>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm text-center p-3" style="background: linear-gradient(135deg, #fce4ec, #fdf2f4);">
+            <h3 class="text-danger fw-bold">{{ (completed_count * 0.5)|round(1) }}</h3>
+            <p class="text-muted mb-0"><i class="fas fa-clock me-1"></i> وقت التعلم (ساعات)</p>
+            <small class="text-muted">تقديري</small>
+        </div>
+    </div>
 </div>
-{% endif %}
 
-{% if top_students %}
-<div class="mt-4">
-    <h3>🏆 طلاب متميزون</h3>
-    <div class="row">
-    {% for student in top_students %}
-    <div class="col-md-4 text-center">
-        <img src="{{ url_for('static', filename='uploads/'+student.profile_pic) }}" class="rounded-circle" width="80" onerror="this.src='https://ui-avatars.com/api/?name={{ student.full_name }}&background=667eea&color=fff&size=80'">
-        <h5>{{ student.full_name }}</h5>
-        <small>{{ student.level }}</small>
+<!-- المحتوى الرئيسي: دروس + اختبارات -->
+<div class="row g-4">
+    <!-- قسم الدروس (تم تغيير الرابط إلى categories_list) -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="fas fa-video me-2 text-primary"></i>أحدث الدروس</h5>
+                <a href="{{ url_for('categories_list') }}" class="text-decoration-none">عرض الكل <i class="fas fa-arrow-left"></i></a>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for lesson in lessons[:2] %}
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="fw-bold">{{ lesson.title }}</h6>
+                                <p class="text-muted small">{{ lesson.description|truncate(60) }}</p>
+                                <a href="{{ url_for('lesson_detail', lesson_id=lesson.id) }}" class="btn btn-outline-primary btn-sm w-100">
+                                    <i class="fas fa-play me-1"></i> مشاهدة
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-12 text-center text-muted py-3">لا توجد دروس منشورة بعد.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
-    {% endfor %}
+
+    <!-- قسم الاختبارات -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-transparent">
+                <h5 class="fw-bold mb-0"><i class="fas fa-puzzle-piece me-2 text-success"></i>الاختبارات</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('tests_home') }}" class="btn btn-outline-success text-start">
+                        <i class="fas fa-random me-2"></i> اختبار عشوائي شامل
+                    </a>
+                    <a href="{{ url_for('tests_home') }}" class="btn btn-outline-warning text-start">
+                        <i class="fas fa-bolt me-2"></i> اختبار السرعة (مؤقت)
+                    </a>
+                    <a href="{{ url_for('tests_home') }}" class="btn btn-outline-info text-start">
+                        <i class="fas fa-tag me-2"></i> حسب الموضوع
+                    </a>
+                </div>
+                <p class="text-muted small mt-2 mb-0">
+                    <i class="fas fa-info-circle me-1"></i> جميع الاختبارات تمنح 10 نقاط XP لكل سؤال صحيح.
+                </p>
+            </div>
+        </div>
+        <!-- شارات سريعة -->
+        <div class="card mt-3 shadow-sm border-0">
+            <div class="card-body text-center">
+                <i class="fas fa-shield-alt fa-2x text-secondary"></i>
+                <p class="mb-0 small text-muted">أنهِ اختباراً بنسبة 100% لفتح شارة "المتفوق"</p>
+            </div>
+        </div>
     </div>
 </div>
-{% endif %}
+
+<!-- قائمة الطلاب -->
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0"><i class="fas fa-users me-2 text-primary"></i>الطلاب النشطون</h5>
+        <a href="{{ url_for('leaderboard') }}" class="text-decoration-none">لوحة المتصدرين <i class="fas fa-arrow-left"></i></a>
+    </div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-3">
+            {% for student in recent_students %}
+            <a href="{{ url_for('public_profile', student_id=student.id) }}" class="text-decoration-none text-dark">
+                <div class="d-flex align-items-center border rounded-3 p-2" style="min-width:150px; transition:0.2s;">
+                    <img src="{{ url_for('static', filename='uploads/' + student.profile_pic) }}" 
+                         style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-left:10px;">
+                    <div>
+                        <span class="fw-bold small d-block">{{ student.full_name }}</span>
+                        <span class="text-muted small">{{ student.student_id }}</span>
+                    </div>
+                </div>
+            </a>
+            {% else %}
+            <p class="text-muted">لا يوجد طلاب آخرون مسجلون بعد.</p>
+            {% endfor %}
+        </div>
+        <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> اضغط على أي طالب لمشاهدة ملفه الشخصي.</p>
+    </div>
+</div>
 {% endblock %}

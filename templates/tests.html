@@ -1,39 +1,65 @@
 {% extends "base.html" %}
-{% block content %}
-<h2>📝 الاختبارات</h2>
 
-<div class="row mt-4">
+{% block title %}الاختبارات{% endblock %}
+
+{% block content %}
+<h2 class="fw-bold mb-4"><i class="fas fa-puzzle-piece me-2 text-primary"></i>مركز الاختبارات</h2>
+
+<div class="row g-4">
+    <!-- البطاقة 1: عشوائي شامل -->
     <div class="col-md-4">
-        <div class="card text-center">
-            <div class="card-body">
-                <h5>🎲 اختبار عشوائي شامل</h5>
-                <p>30 سؤالاً من جميع الدروس<br>الوقت: 30 دقيقة</p>
-                <a href="/test" class="btn btn-primary">ابدأ</a>
-            </div>
+        <div class="card h-100 shadow-sm border-0 text-center p-4">
+            <div class="display-1 text-success mb-3"><i class="fas fa-random"></i></div>
+            <h4 class="fw-bold">اختبار عشوائي شامل</h4>
+            <p class="text-muted">10 أسئلة عشوائية من جميع الدروس. تحدٍ ممتع!</p>
+            <form method="POST" action="{{ url_for('start_test') }}">
+                <input type="hidden" name="quiz_type" value="random">
+                <button type="submit" class="btn btn-success w-100 mt-3">
+                    <i class="fas fa-play me-2"></i>ابدأ الاختبار
+                </button>
+            </form>
         </div>
     </div>
+
+    <!-- البطاقة 2: سرعة -->
     <div class="col-md-4">
-        <div class="card text-center">
-            <div class="card-body">
-                <h5>⚡ اختبار سرعة</h5>
-                <p>30 سؤالاً عشوائياً<br>الوقت: 10 دقائق فقط</p>
-                <a href="/test/speed" class="btn btn-warning">ابدأ</a>
-            </div>
+        <div class="card h-100 shadow-sm border-0 text-center p-4">
+            <div class="display-1 text-warning mb-3"><i class="fas fa-bolt"></i></div>
+            <h4 class="fw-bold">اختبار السرعة ⏱️</h4>
+            <p class="text-muted">10 أسئلة، كل سؤال له مؤقت 30 ثانية. هل أنت سريع؟</p>
+            <form method="POST" action="{{ url_for('start_test') }}">
+                <input type="hidden" name="quiz_type" value="speed">
+                <button type="submit" class="btn btn-warning w-100 mt-3">
+                    <i class="fas fa-play me-2"></i>ابدأ التحدي
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- البطاقة 3: حسب الموضوع -->
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 text-center p-4">
+            <div class="display-1 text-info mb-3"><i class="fas fa-tag"></i></div>
+            <h4 class="fw-bold">حسب الموضوع</h4>
+            <p class="text-muted">اختر درساً معيناً للإجابة على أسئلته فقط.</p>
+            <form method="POST" action="{{ url_for('start_test') }}">
+                <input type="hidden" name="quiz_type" value="subject">
+                <select name="lesson_id" class="form-select mb-3" required>
+                    <option value="">-- اختر الدرس --</option>
+                    {% for lesson in lessons %}
+                    <option value="{{ lesson.id }}">{{ lesson.title }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-info w-100 text-white">
+                    <i class="fas fa-play me-2"></i>ابدأ الاختبار
+                </button>
+            </form>
         </div>
     </div>
 </div>
 
-<h4 class="mt-5">📚 اختبارات حسب الموضوع</h4>
-<div class="row">
-    {% for lesson in lessons %}
-    <div class="col-md-4 mb-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h6>{{ lesson.order }}. {{ lesson.title }}</h6>
-                <a href="/test/subject/{{ lesson.id }}" class="btn btn-outline-success btn-sm">اختبار هذا الدرس</a>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
+<div class="alert alert-secondary mt-4">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>ملاحظة:</strong> تحصل على <strong>10 نقاط XP</strong> عن كل إجابة صحيحة. اجمع النقاط وارفع مستواك!
 </div>
 {% endblock %}

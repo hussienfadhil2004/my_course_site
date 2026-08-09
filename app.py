@@ -1,885 +1,1092 @@
-import os, json, time, shutil
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort, send_from_directory, render_template_string
+import os
+import json
+import random
+import math
+from datetime import datetime, timedelta
+from functools import wraps
+
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, send_file
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
-from flask_socketio import SocketIO, emit
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from PIL import Image
 from fpdf import FPDF
-import random, string
+import io
 
-class Config:
-    SECRET_KEY = 'super-secret-key-change-me'
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024
+load_dotenv()
 
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    database_url = os.environ.get('DATABASE_URL')
-    if database_url:
-        if database_url.startswith("postgres://"):
-            database_url = database_url.replace("postgres://", "postgresql://", 1)
-        SQLALCHEMY_DATABASE_URI = database_url
-    else:
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'database.db')
-
+# ==================== الإعدادات الأساسية ====================
 app = Flask(__name__)
-app.config.from_object(Config)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-please-change-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///mycourse.db')
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs('static/css', exist_ok=True)
+os.makedirs('static/js', exist_ok=True)
+
+# ==================== قاعدة البيانات ====================
 db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
+migrate = Migrate(app, db)
+login_manager = LoginManager(app)
 login_manager.login_view = 'login'
-login_manager.remember_cookie_duration = timedelta(days=365)
-socketio = SocketIO(app, cors_allowed_origins="*")
+login_manager.login_message = 'يرجى تسجيل الدخول أولاً.'
+login_manager.login_message_category = 'warning'
 
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-online_users = {}
+# ==================== ديكور صلاحيات المسؤول ====================
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
-# ========== النماذج ==========
+# ==================== نماذج قاعدة البيانات ====================
 class User(UserMixin, db.Model):
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.String(10), unique=True, nullable=False)
+    student_id = db.Column(db.String(20), unique=True, nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    email_or_phone = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    bio = db.Column(db.Text, default='')
-    telegram_link = db.Column(db.String(100), default='')
-    whatsapp_link = db.Column(db.String(100), default='')
-    show_real_name = db.Column(db.Boolean, default=True)
-    profile_pic = db.Column(db.String(200), default='default.png')
-    role = db.Column(db.String(20), default='student')
-    level = db.Column(db.String(20), default='مبتدئ')
-    badges = db.Column(db.String(500), default='')
-    status = db.Column(db.String(50), default='متصل')
-    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    profile_pic = db.Column(db.String(255), nullable=False, default='default.png')
+    bio = db.Column(db.Text, nullable=True)
+    social_links = db.Column(db.Text, nullable=True, default='{}')
+    is_admin = db.Column(db.Boolean, default=False)
+    is_banned = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    xp_points = db.Column(db.Integer, default=0)
+    level = db.Column(db.Integer, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    banned = db.Column(db.Boolean, default=False)
-    lessons_completed = db.relationship('LessonProgress', backref='user', lazy=True)
-    test_results = db.relationship('TestResult', backref='user', lazy=True)
-    achievements = db.relationship('UserAchievement', backref='user', lazy=True)
+    last_password_change = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+
+    quiz_attempts = db.relationship('QuizAttempt', backref='user', lazy=True, cascade='all, delete-orphan')
+    badges = db.relationship('UserBadge', backref='user', lazy=True, cascade='all, delete-orphan')
+    lesson_progress = db.relationship('LessonProgress', backref='user', lazy=True, cascade='all, delete-orphan')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+        self.last_password_change = datetime.utcnow()
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def get_social_links(self):
+        try:
+            return json.loads(self.social_links) if self.social_links else {}
+        except:
+            return {}
+
+    def set_social_links(self, links_dict):
+        self.social_links = json.dumps(links_dict)
+
+class Category(db.Model):
+    """نموذج التصنيفات (مثل: برامج النظام، لغات البرمجة، شبكات...)"""
+    __tablename__ = 'categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    icon = db.Column(db.String(50), nullable=True)  # أيقونة Font Awesome
+    order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    lessons = db.relationship('Lesson', backref='category', lazy=True, cascade='all, delete-orphan')
 
 class Lesson(db.Model):
+    __tablename__ = 'lessons'
+    id = db.Column(db.Integer, primary_key=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    content = db.Column(db.Text, nullable=True)
+    youtube_url = db.Column(db.String(255), nullable=True)
+    order = db.Column(db.Integer, default=0)
+    is_published = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    questions = db.relationship('Question', backref='lesson', lazy=True, cascade='all, delete-orphan')
+    progress = db.relationship('LessonProgress', backref='lesson', lazy=True, cascade='all, delete-orphan')
+
+class LessonProgress(db.Model):
+    __tablename__ = 'lesson_progress'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lessons.id'), nullable=False)
+    is_completed = db.Column(db.Boolean, default=False)
+    last_watched = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+class Question(db.Model):
+    __tablename__ = 'questions'
+    id = db.Column(db.Integer, primary_key=True)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lessons.id'), nullable=False)
+    type = db.Column(db.String(20), nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    option_a = db.Column(db.String(255), nullable=True)
+    option_b = db.Column(db.String(255), nullable=True)
+    option_c = db.Column(db.String(255), nullable=True)
+    option_d = db.Column(db.String(255), nullable=True)
+    correct_answer = db.Column(db.String(255), nullable=False)
+    difficulty = db.Column(db.String(20), default='medium')
+
+class QuizAttempt(db.Model):
+    __tablename__ = 'quiz_attempts'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    quiz_type = db.Column(db.String(50), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lessons.id'), nullable=True)
+    score = db.Column(db.Float, default=0.0)
+    total_questions = db.Column(db.Integer, default=0)
+    correct_count = db.Column(db.Integer, default=0)
+    time_taken = db.Column(db.Integer, default=0)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    answers = db.relationship('UserAnswer', backref='attempt', lazy=True, cascade='all, delete-orphan')
+
+class UserAnswer(db.Model):
+    __tablename__ = 'user_answers'
+    id = db.Column(db.Integer, primary_key=True)
+    attempt_id = db.Column(db.Integer, db.ForeignKey('quiz_attempts.id'), nullable=False)
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False)
+    selected_answer = db.Column(db.String(255), nullable=False)
+    is_correct = db.Column(db.Boolean, default=False)
+
+class Badge(db.Model):
+    __tablename__ = 'badges'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    icon = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    condition_type = db.Column(db.String(50), nullable=False)
+
+class UserBadge(db.Model):
+    __tablename__ = 'user_badges'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    badge_id = db.Column(db.Integer, db.ForeignKey('badges.id'), nullable=False)
+    earned_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Announcement(db.Model):
+    __tablename__ = 'announcements'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    order = db.Column(db.Integer, unique=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_published = db.Column(db.Boolean, default=True)
 
-class LessonProgress(db.Model):
+class PasswordResetRequest(db.Model):
+    __tablename__ = 'password_reset_requests'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
-    completed = db.Column(db.Boolean, default=True)
-    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Question(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    question_text = db.Column(db.Text, nullable=False)
-    question_type = db.Column(db.String(10), default='mcq')
-    option_a = db.Column(db.String(200))
-    option_b = db.Column(db.String(200))
-    option_c = db.Column(db.String(200))
-    option_d = db.Column(db.String(200))
-    correct_answer = db.Column(db.String(1))
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=True)
-
-class TestResult(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    score = db.Column(db.Float, nullable=False)
-    total_questions = db.Column(db.Integer, nullable=False)
-    answers = db.Column(db.Text, default='')
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    test_type = db.Column(db.String(20), default='random')
-
-class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_messages')
-    recipient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    text = db.Column(db.Text, nullable=False)
-    file_path = db.Column(db.String(300))
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    edited = db.Column(db.Boolean, default=False)
-    edited_at = db.Column(db.DateTime, nullable=True)
-    reply_to_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=True)
-
-class Notification(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    content = db.Column(db.String(300))
-    is_read = db.Column(db.Boolean, default=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-class RecoveryRequest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    type = db.Column(db.String(20))
-    contact = db.Column(db.String(100))
-    resolved = db.Column(db.Boolean, default=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Achievement(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.String(200))
-    icon = db.Column(db.String(50))
-    condition_type = db.Column(db.String(50))
-    condition_value = db.Column(db.Integer)
-
-class UserAchievement(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    achievement_id = db.Column(db.Integer, db.ForeignKey('achievement.id'), nullable=False)
-    earned_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class AuditLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    action = db.Column(db.String(200))
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Announcement(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    content = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    is_used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-class Resource(db.Model):
+class ActivityLog(db.Model):
+    __tablename__ = 'activity_logs'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200))
-    type = db.Column(db.String(20))
-    url = db.Column(db.String(300))
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    action = db.Column(db.String(255), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# ---------- بذور البيانات ----------
-def seed_database():
-    db.create_all()
-    if not User.query.filter_by(username='admin').first():
-        db.session.add(User(student_id='STU0000', full_name='مدير النظام', username='admin',
-                            email_or_phone='admin@example.com',
-                            password=generate_password_hash('admin123'), role='admin', level='محترف', status='متصل'))
-    lessons_data = [
-        (1, 'السلامة المهنية', 'السلامة المهنية هي مجموعة من القواعد...'),
-        (2, 'تعريف الحاسوب', 'الحاسوب هو جهاز إلكتروني...'),
-        (3, 'مكونات الحاسوب', 'وحدات الإدخال والإخراج...'),
-        (4, 'استخدام الماوس ولوحة المفاتيح', 'الاختصارات الأساسية...'),
-        (5, 'سطح المكتب وشريط المهام', 'أيقونات سطح المكتب...'),
-        (6, 'إدارة الملفات', 'نسخ، قص، لصق...'),
-        (7, 'برامج النظام', 'المفكرة، الرسام...'),
-        (8, 'تنزيل التطبيقات', 'تثبيت البرامج...'),
-        (9, 'مايكروسوفت وورد', 'التنسيق والجداول...'),
-        (10, 'مايكروسوفت باوربوينت', 'الشرائح والحركات...'),
-        (11, 'مايكروسوفت إكسل', 'الدوال والمعادلات...'),
-        (12, 'استعداد للاختبارات', 'مراجعة شاملة...')
-    ]
-    for order, title, content in lessons_data:
-        if not Lesson.query.filter_by(order=order).first():
-            db.session.add(Lesson(title=title, content=content, order=order))
-
-    questions = [
-        ('ما هو الهدف من السلامة المهنية؟', 'mcq', 'حماية العاملين', 'زيادة الإنتاج', 'خفض التكاليف', 'كل ما سبق', 'a', 1),
-        ('كم مرة يجب أخذ استراحة عند استخدام الحاسوب؟', 'mcq', 'كل ساعة', 'كل 30 دقيقة', 'كل 10 دقائق', 'عند الحاجة', 'b', 1),
-        ('السلامة المهنية مهمة للحفاظ على صحة المستخدم.', 'tf', None, None, None, None, 't', 1),
-        ('أي من هذه يعتبر حاسوباً شخصياً؟', 'mcq', 'Server', 'Tablet', 'Desktop', 'Supercomputer', 'c', 2),
-        ('الكمبيوتر المحمول يسمى Laptop.', 'tf', None, None, None, None, 't', 2),
-        ('الخادم هو حاسوب عملاق.', 'tf', None, None, None, None, 'f', 2),
-        ('أي مما يلي وحدة إدخال؟', 'mcq', 'الشاشة', 'الطابعة', 'الفأرة', 'السماعات', 'c', 3),
-        ('وحدة المعالجة المركزية تسمى CPU.', 'tf', None, None, None, None, 't', 3),
-        ('الذاكرة RAM تفقد بياناتها عند إطفاء الجهاز.', 'tf', None, None, None, None, 't', 3),
-        ('لإعادة تسمية ملف نضغط:', 'mcq', 'F2', 'F3', 'F4', 'F5', 'a', 4),
-        ('Ctrl+Z للتراجع.', 'tf', None, None, None, None, 't', 4),
-        ('لحفظ ملف نضغط Ctrl+S.', 'tf', None, None, None, None, 't', 4),
-        ('Windows+E يفتح:', 'mcq', 'المستندات', 'مستكشف الملفات', 'الإعدادات', 'الطابعة', 'b', 5),
-        ('لتحديد الكل نضغط Ctrl+A.', 'tf', None, None, None, None, 't', 5),
-        ('سطح المكتب هو الشاشة الرئيسية.', 'tf', None, None, None, None, 't', 5),
-        ('لنسخ ملف نستخدم:', 'mcq', 'قص', 'نسخ', 'حذف', 'إعادة تسمية', 'b', 6),
-        ('سلة المحذوفات تحذف الملفات نهائياً.', 'tf', None, None, None, None, 'f', 6),
-        ('يمكن استعادة ملف من سلة المحذوفات.', 'tf', None, None, None, None, 't', 6),
-        ('برنامج الرسام يستخدم للرسم.', 'tf', None, None, None, None, 't', 7),
-        ('المفكرة تدعم التنسيق.', 'tf', None, None, None, None, 'f', 7),
-        ('أداة القصاصة تلتقط صور الشاشة.', 'tf', None, None, None, None, 't', 7),
-        ('لتثبيت برنامج، نفتح ملف .exe.', 'tf', None, None, None, None, 't', 8),
-        ('لإزالة برنامج نذهب إلى لوحة التحكم.', 'tf', None, None, None, None, 't', 8),
-        ('يجب تحميل البرامج من مواقع غير رسمية.', 'tf', None, None, None, None, 'f', 8),
-        ('في وورد، Ctrl+B يجعل الخط غامقاً.', 'tf', None, None, None, None, 't', 9),
-        ('يمكن إدراج صورة في وورد.', 'tf', None, None, None, None, 't', 9),
-        ('امتداد الوورد هو .pptx.', 'tf', None, None, None, None, 'f', 9),
-        ('يستخدم باوربوينت للعروض التقديمية.', 'tf', None, None, None, None, 't', 10),
-        ('F5 يبدأ عرض الشرائح.', 'tf', None, None, None, None, 't', 10),
-        ('الحركات في باوربوينت تكون بين الشرائح فقط.', 'tf', None, None, None, None, 'f', 10),
-        ('SUM دالة جمع في إكسل.', 'tf', None, None, None, None, 't', 11),
-        ('امتداد الإكسل هو .xlsx.', 'tf', None, None, None, None, 't', 11),
-        ('الخلية A1 هي تقاطع العمود A والصف 1.', 'tf', None, None, None, None, 't', 11),
-        ('يجب مراجعة جميع الدروس قبل الاختبار.', 'tf', None, None, None, None, 't', 12),
-        ('يمكن إعادة الاختبار أكثر من مرة.', 'tf', None, None, None, None, 't', 12),
-        ('النجاح من 50%.', 'tf', None, None, None, None, 'f', 12),
-    ]
-    for q in questions:
-        text, qtype, a, b, c, d, ans, lid = q
-        if not Question.query.filter_by(question_text=text).first():
-            db.session.add(Question(question_text=text, question_type=qtype, option_a=a, option_b=b, option_c=c, option_d=d, correct_answer=ans, lesson_id=lid))
-
-    achievements = [
-        ('بداية الرحلة', 'سجل في الموقع', '🎉', 'account_created', 1),
-        ('متعلم جاد', 'أكمل 3 دروس', '📚', 'lessons_completed', 3),
-        ('متميز', 'أكمل جميع الدروس', '🌟', 'lessons_completed', 12),
-    ]
-    for name, desc, icon, ctype, cval in achievements:
-        if not Achievement.query.filter_by(name=name).first():
-            db.session.add(Achievement(name=name, description=desc, icon=icon, condition_type=ctype, condition_value=cval))
-    db.session.commit()
-
-# ---------- تسجيل ----------
+# ==================== تسجيل مدير الدخول ====================
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ==================== دوال مساعدة ====================
 def generate_student_id():
-    last = User.query.order_by(User.id.desc()).first()
-    num = int(last.student_id[3:]) + 1 if last and last.student_id.startswith('STU') else 1
-    return f'STU{num:04d}'
+    last_user = User.query.order_by(User.id.desc()).first()
+    if last_user and last_user.student_id and last_user.student_id.startswith('STU'):
+        try:
+            num = int(last_user.student_id[3:]) + 1
+            return f'STU{num:04d}'
+        except:
+            return 'STU0001'
+    return 'STU0001'
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png','jpg','jpeg','gif','pdf','doc','docx','mp4','webm','mp3','wav'}
+def log_activity(user_id, action, ip=None):
+    log = ActivityLog(user_id=user_id, action=action, ip_address=ip or request.remote_addr)
+    db.session.add(log)
+    db.session.commit()
 
-def get_arabic_rank(score):
-    if score >= 90: return 'محترف'
-    elif score >= 70: return 'متوسط'
-    return 'مبتدئ'
-
-# ---------- المسارات الأساسية ----------
-@app.route('/')
+# ==================== مسارات المصادقة والملف الشخصي ====================
+@app.route('/', methods=['GET'])
 def index():
-    return render_template('index.html')
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
-@app.route('/register', methods=['GET','POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
-        full_name = request.form['full_name'].strip()
-        username = request.form['username'].strip()
-        email_or_phone = request.form['email_or_phone'].strip()
-        password = request.form['password']
-        if User.query.filter_by(username=username).first():
-            flash('اسم المستخدم موجود مسبقاً', 'danger')
-            return redirect(url_for('register'))
-        if User.query.filter_by(email_or_phone=email_or_phone).first():
-            flash('البريد/الهاتف مستخدم مسبقاً', 'danger')
-            return redirect(url_for('register'))
-        user = User(full_name=full_name, username=username, email_or_phone=email_or_phone,
-                    password=generate_password_hash(password), student_id=generate_student_id(), status='متصل')
-        db.session.add(user)
+        full_name = request.form.get('full_name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        phone = request.form.get('phone', '').strip()
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if not full_name or not email or not password:
+            flash('جميع الحقول المطلوبة يجب تعبئتها.', 'danger')
+            return render_template('register.html')
+        if password != confirm:
+            flash('كلمة المرور غير متطابقة.', 'danger')
+            return render_template('register.html')
+        if len(password) < 6:
+            flash('كلمة المرور 6 أحرف على الأقل.', 'danger')
+            return render_template('register.html')
+        if User.query.filter((User.email == email) | (User.phone == phone if phone else False)).first():
+            flash('البريد الإلكتروني أو رقم الهاتف مستخدم بالفعل.', 'danger')
+            return render_template('register.html')
+        new_user = User(
+            student_id=generate_student_id(),
+            full_name=full_name,
+            email=email,
+            phone=phone if phone else None,
+            is_admin=False
+        )
+        new_user.set_password(password)
+        db.session.add(new_user)
         db.session.commit()
-        login_user(user, remember=True)
-        flash(f'تم التسجيل! المعرف الدراسي: {user.student_id}', 'success')
+        log_activity(new_user.id, f'تسجيل حساب جديد: {new_user.student_id}')
+        flash(f'تم إنشاء حسابك! معرفك: {new_user.student_id}', 'success')
+        login_user(new_user, remember=True)
         return redirect(url_for('profile'))
     return render_template('register.html')
 
-@app.route('/login', methods=['GET','POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password']
-        remember = True if request.form.get('remember') else False
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            if user.banned:
-                flash('تم حظر حسابك. تواصل مع المشرف.', 'danger')
-                return redirect(url_for('login'))
+        email_or_phone = request.form.get('email_or_phone', '').strip().lower()
+        password = request.form.get('password', '')
+        remember = 'remember' in request.form
+        user = User.query.filter((User.email == email_or_phone) | (User.phone == email_or_phone)).first()
+        if user and user.check_password(password):
+            if user.is_banned:
+                flash('هذا الحساب محظور.', 'danger')
+                return render_template('login.html')
             login_user(user, remember=remember)
             user.last_seen = datetime.utcnow()
-            user.status = 'متصل'
             db.session.commit()
-            flash('تم تسجيل الدخول بنجاح', 'success')
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
-        flash('اسم المستخدم أو كلمة المرور غير صحيحة', 'danger')
+            log_activity(user.id, f'تسجيل دخول: {user.student_id}')
+            flash(f'مرحباً بعودتك {user.full_name}!', 'success')
+            return redirect(url_for('dashboard'))
+        flash('بيانات الدخول غير صحيحة.', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
 @login_required
 def logout():
-    current_user.status = 'غير متصل'
-    current_user.last_seen = datetime.utcnow()
-    db.session.commit()
+    log_activity(current_user.id, f'تسجيل خروج: {current_user.student_id}')
     logout_user()
-    return redirect(url_for('index'))
+    flash('تم تسجيل الخروج.', 'info')
+    return redirect(url_for('login'))
 
-@app.route('/profile', methods=['GET','POST'])
+@app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
-    achievements = UserAchievement.query.filter_by(user_id=current_user.id).all()
     if request.method == 'POST':
+        bio = request.form.get('bio', '').strip()
+        social_links_str = request.form.get('social_links', '{}').strip()
+        try:
+            social_links = json.loads(social_links_str)
+            if not isinstance(social_links, dict):
+                raise ValueError()
+        except:
+            flash('الرابط الاجتماعي بصيغة JSON غير صحيحة.', 'danger')
+            return render_template('profile.html', user=current_user)
+        current_user.bio = bio
+        current_user.set_social_links(social_links)
         if 'profile_pic' in request.files:
             file = request.files['profile_pic']
-            if file and file.filename and allowed_file(file.filename):
-                filename = secure_filename(f"{current_user.username}_{file.filename}")
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                current_user.profile_pic = filename
-        current_user.bio = request.form.get('bio','').strip()
-        current_user.telegram_link = request.form.get('telegram','').strip()
-        current_user.whatsapp_link = request.form.get('whatsapp','').strip()
-        current_user.show_real_name = 'show_real_name' in request.form
-        current_user.status = request.form.get('status','متصل')
+            if file and file.filename != '':
+                if '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS:
+                    if current_user.profile_pic != 'default.png':
+                        old_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic)
+                        if os.path.exists(old_path):
+                            os.remove(old_path)
+                    filename = f"user_{current_user.id}_{datetime.utcnow().timestamp()}.{file.filename.rsplit('.', 1)[1].lower()}"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    try:
+                        img = Image.open(filepath)
+                        img.thumbnail((300, 300))
+                        img.save(filepath)
+                    except:
+                        pass
+                    current_user.profile_pic = filename
+                    flash('تم تحديث الصورة.', 'success')
+                else:
+                    flash('امتداد الملف غير مدعوم.', 'danger')
         db.session.commit()
-        flash('تم تحديث الملف الشخصي', 'success')
+        flash('تم تحديث الملف الشخصي.', 'success')
         return redirect(url_for('profile'))
-    return render_template('profile.html', user=current_user, achievements=achievements)
+    return render_template('profile.html', user=current_user)
 
-@app.route('/student/<int:user_id>')
-def public_profile(user_id):
-    user = User.query.get_or_404(user_id)
-    if user.role == 'admin':
-        flash('لا يمكن عرض ملف المشرف', 'warning')
-        return redirect(url_for('students'))
-    achievements = UserAchievement.query.filter_by(user_id=user.id).all()
-    return render_template('public_profile.html', user=user, achievements=achievements)
-
-@app.route('/guest')
-def guest_home():
-    lessons = Lesson.query.order_by(Lesson.order).limit(3).all()
-    return render_template('guest.html', lessons=lessons)
-
-@app.route('/guest/lesson/<int:lesson_id>')
-def guest_lesson(lesson_id):
-    if lesson_id > 3:
-        flash('يجب التسجيل لمشاهدة جميع الدروس', 'warning')
-        return redirect(url_for('guest_home'))
-    lesson = Lesson.query.get_or_404(lesson_id)
-    return render_template('lesson_detail.html', lesson=lesson)
-
-@app.route('/students')
+# ==================== المسارات العامة ====================
+@app.route('/dashboard')
 @login_required
-def students():
-    users = User.query.filter(User.role != 'admin', User.banned == False).all()
-    return render_template('students.html', users=users)
+def dashboard():
+    lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
+    completed_count = LessonProgress.query.filter_by(user_id=current_user.id, is_completed=True).count()
+    total_lessons = Lesson.query.filter_by(is_published=True).count()
+    recent_attempts = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.completed_at.desc()).limit(5).all()
+    avg_score = sum(a.score for a in recent_attempts) / len(recent_attempts) if recent_attempts else 0
+    recent_students = User.query.filter_by(is_admin=False).order_by(User.created_at.desc()).limit(5).all()
+    categories = Category.query.order_by(Category.order).all()
+    return render_template('index.html', user=current_user, lessons=lessons, completed_count=completed_count,
+                         total_lessons=total_lessons, avg_score=round(avg_score, 1), recent_students=recent_students,
+                         categories=categories)
 
+# ==================== مسارات الدروس مع التصنيفات ====================
 @app.route('/lessons')
 @login_required
-def lessons():
-    lessons = Lesson.query.order_by(Lesson.order).all()
-    completed_ids = [lp.lesson_id for lp in current_user.lessons_completed]
-    return render_template('lessons.html', lessons=lessons, completed=completed_ids)
+def categories_list():
+    """عرض جميع التصنيفات"""
+    categories = Category.query.order_by(Category.order).all()
+    return render_template('categories.html', categories=categories)
+
+@app.route('/category/<int:category_id>')
+@login_required
+def category_lessons(category_id):
+    """عرض الدروس ضمن تصنيف معين"""
+    category = Category.query.get_or_404(category_id)
+    lessons = Lesson.query.filter_by(category_id=category.id, is_published=True).order_by(Lesson.order).all()
+    
+    # جلب حالة التقدم لكل درس
+    progress_dict = {}
+    for l in lessons:
+        prog = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=l.id).first()
+        progress_dict[l.id] = prog.is_completed if prog else False
+    
+    return render_template('category_lessons.html', category=category, lessons=lessons, progress_dict=progress_dict)
 
 @app.route('/lesson/<int:lesson_id>')
 @login_required
 def lesson_detail(lesson_id):
     lesson = Lesson.query.get_or_404(lesson_id)
-    if not LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson_id).first():
-        db.session.add(LessonProgress(user_id=current_user.id, lesson_id=lesson_id))
-        db.session.commit()
-    prev_lesson = Lesson.query.filter(Lesson.order < lesson.order).order_by(Lesson.order.desc()).first()
-    next_lesson = Lesson.query.filter(Lesson.order > lesson.order).order_by(Lesson.order.asc()).first()
-    return render_template('lesson_detail.html', lesson=lesson, prev=prev_lesson, next=next_lesson)
+    if not lesson.is_published:
+        flash('الدرس غير منشور.', 'warning')
+        return redirect(url_for('categories_list'))
+    
+    # جلب الدرس السابق والتالي في نفس التصنيف
+    prev_lesson = Lesson.query.filter(
+        Lesson.category_id == lesson.category_id, 
+        Lesson.order < lesson.order, 
+        Lesson.is_published == True
+    ).order_by(Lesson.order.desc()).first()
+    
+    next_lesson = Lesson.query.filter(
+        Lesson.category_id == lesson.category_id, 
+        Lesson.order > lesson.order, 
+        Lesson.is_published == True
+    ).order_by(Lesson.order.asc()).first()
+    
+    progress = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson.id).first()
+    is_completed = progress.is_completed if progress else False
+    questions = Question.query.filter_by(lesson_id=lesson.id).all()
+    
+    return render_template('lesson_detail.html', lesson=lesson, prev_lesson=prev_lesson, next_lesson=next_lesson,
+                         is_completed=is_completed, questions=questions, category=lesson.category)
 
-# ---------- صفحة أنواع الاختبارات (مضمنة مباشرة) ----------
+@app.route('/complete_lesson/<int:lesson_id>', methods=['POST'])
+@login_required
+def complete_lesson(lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    progress = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson.id).first()
+    if not progress:
+        progress = LessonProgress(user_id=current_user.id, lesson_id=lesson.id)
+        db.session.add(progress)
+    if not progress.is_completed:
+        progress.is_completed = True
+        progress.completed_at = datetime.utcnow()
+        current_user.xp_points += 50
+        if current_user.xp_points >= current_user.level * 200:
+            current_user.level += 1
+            flash(f'🎉 ترقيت إلى المستوى {current_user.level}!', 'success')
+        db.session.commit()
+        log_activity(current_user.id, f'أكمل الدرس: {lesson.title}')
+        flash('✅ تم إكمال الدرس!', 'success')
+    else:
+        flash('الدرس مكتمل مسبقاً.', 'info')
+    return redirect(url_for('lesson_detail', lesson_id=lesson.id))
+
+# ==================== مسارات الاختبارات ====================
 @app.route('/tests')
 @login_required
-def tests():
-    lessons = Lesson.query.order_by(Lesson.order).all()
-    html = '''
-    {% extends "base.html" %}
-    {% block content %}
-    <h2>📝 الاختبارات</h2>
-    <div class="row mt-4">
-        <div class="col-md-4">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5>🎲 اختبار عشوائي شامل</h5>
-                    <p>30 سؤالاً من جميع الدروس<br>الوقت: 30 دقيقة</p>
-                    <a href="/test" class="btn btn-primary">ابدأ</a>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5>⚡ اختبار سرعة</h5>
-                    <p>30 سؤالاً عشوائياً<br>الوقت: 10 دقائق فقط</p>
-                    <a href="/test/speed" class="btn btn-warning">ابدأ</a>
-                </div>
-            </div>
-        </div>
-    </div>
-    <h4 class="mt-5">📚 اختبارات حسب الموضوع</h4>
-    <div class="row">
-    '''
-    for lesson in lessons:
-        html += f'''
-        <div class="col-md-4 mb-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h6>{lesson.order}. {lesson.title}</h6>
-                    <a href="/test/subject/{lesson.id}" class="btn btn-outline-success btn-sm">اختبار هذا الدرس</a>
-                </div>
-            </div>
-        </div>
-        '''
-    html += '</div>{% endblock %}'
-    return render_template_string(html, lessons=lessons)
+def tests_home():
+    lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
+    return render_template('tests.html', lessons=lessons)
 
-# ---------- الاختبار حسب الموضوع ----------
-@app.route('/test/subject/<int:lesson_id>')
+@app.route('/start_test', methods=['POST'])
 @login_required
-def test_subject_start(lesson_id):
-    lesson = Lesson.query.get_or_404(lesson_id)
-    questions = Question.query.filter_by(lesson_id=lesson_id).order_by(db.func.random()).all()
-    if len(questions) == 0:
-        flash('لا توجد أسئلة لهذا الدرس بعد.', 'warning')
-        return redirect(url_for('tests'))
-    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
-    session['current_q_index'] = 0
-    session['score'] = 0
-    session['answers'] = []
-    session['test_type'] = 'subject'
-    session['test_start_time'] = time.time()
-    session['test_total_time'] = len(questions) * 60
-    return redirect(url_for('test_question'))
+def start_test():
+    quiz_type = request.form.get('quiz_type')
+    lesson_id = request.form.get('lesson_id')
+    if quiz_type not in ['random', 'speed', 'subject']:
+        flash('نوع غير صحيح.', 'danger')
+        return redirect(url_for('tests_home'))
+    if quiz_type == 'subject':
+        if not lesson_id:
+            flash('اختر درساً.', 'danger')
+            return redirect(url_for('tests_home'))
+        lesson = Lesson.query.get(int(lesson_id))
+        if not lesson:
+            flash('الدرس غير موجود.', 'danger')
+            return redirect(url_for('tests_home'))
+        questions = Question.query.filter_by(lesson_id=lesson.id).all()
+        if not questions:
+            flash('لا توجد أسئلة.', 'danger')
+            return redirect(url_for('tests_home'))
+        if len(questions) > 10:
+            questions = random.sample(questions, 10)
+        total_questions = len(questions)
+    else:
+        all_questions = Question.query.all()
+        if not all_questions:
+            flash('لا توجد أسئلة.', 'danger')
+            return redirect(url_for('tests_home'))
+        sample_size = min(10, len(all_questions))
+        questions = random.sample(all_questions, sample_size)
+        total_questions = sample_size
+    random.shuffle(questions)
+    session['quiz_data'] = {
+        'questions': [q.id for q in questions],
+        'total': total_questions,
+        'current_index': 0,
+        'answers': {},
+        'quiz_type': quiz_type,
+        'lesson_id': int(lesson_id) if quiz_type == 'subject' else None,
+        'start_time': datetime.utcnow().isoformat()
+    }
+    return redirect(url_for('take_test'))
 
-# ---------- اختبار السرعة ----------
-@app.route('/test/speed')
-@login_required
-def test_speed_start():
-    questions = Question.query.order_by(db.func.random()).limit(30).all()
-    if len(questions) == 0:
-        flash('لا توجد أسئلة.', 'warning')
-        return redirect(url_for('tests'))
-    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
-    session['current_q_index'] = 0
-    session['score'] = 0
-    session['answers'] = []
-    session['test_type'] = 'speed'
-    session['test_start_time'] = time.time()
-    session['test_total_time'] = 600
-    return redirect(url_for('test_question'))
-
-# ---------- الاختبار العشوائي الشامل ----------
 @app.route('/test')
 @login_required
-def test_start():
-    questions = Question.query.order_by(db.func.random()).limit(30).all()
-    if len(questions) == 0:
-        flash('لا توجد أسئلة.', 'warning')
-        return redirect(url_for('tests'))
-    session['test_questions'] = [{'id': q.id, 'type': q.question_type} for q in questions]
-    session['current_q_index'] = 0
-    session['score'] = 0
-    session['answers'] = []
-    session['test_type'] = 'random'
-    session['test_start_time'] = time.time()
-    session['test_total_time'] = 30 * 60
-    return redirect(url_for('test_question'))
+def take_test():
+    quiz_data = session.get('quiz_data')
+    if not quiz_data:
+        flash('لم يبدأ اختبار.', 'warning')
+        return redirect(url_for('tests_home'))
+    current_index = quiz_data['current_index']
+    total = quiz_data['total']
+    if current_index >= total:
+        return redirect(url_for('submit_test'))
+    question_id = quiz_data['questions'][current_index]
+    question = Question.query.get(question_id)
+    if not question:
+        flash('خطأ في السؤال.', 'danger')
+        return redirect(url_for('tests_home'))
+    options = [q for q in [question.option_a, question.option_b, question.option_c, question.option_d] if q] if question.type == 'MCQ' else ['صحيح', 'خطأ']
+    elapsed_time = int((datetime.utcnow() - datetime.fromisoformat(quiz_data['start_time'])).total_seconds()) if quiz_data['quiz_type'] == 'speed' else 0
+    return render_template('test.html', question=question, options=options, current_index=current_index+1,
+                         total=total, quiz_type=quiz_data['quiz_type'], elapsed_time=elapsed_time)
 
-# ---------- دوال الاختبار المشتركة ----------
-@app.route('/test/question')
+@app.route('/submit_answer', methods=['POST'])
 @login_required
-def test_question():
-    ids = session.get('test_questions')
-    if not ids: return redirect(url_for('tests'))
-    idx = session.get('current_q_index', 0)
-    if idx >= len(ids): return redirect(url_for('test_result'))
-    qdata = ids[idx]
-    question = Question.query.get(qdata['id'])
-    elapsed = time.time() - session.get('test_start_time', time.time())
-    total_time = session.get('test_total_time', 30*60)
-    remaining = max(0, total_time - int(elapsed))
-    test_type = session.get('test_type', 'random')
-    lesson = Lesson.query.get(question.lesson_id) if question.lesson_id else None
-    return render_template('test.html', question=question, index=idx+1, total=len(ids),
-                           remaining=remaining, test_type=test_type, lesson=lesson)
+def submit_answer():
+    quiz_data = session.get('quiz_data')
+    if not quiz_data:
+        flash('انتهت الجلسة.', 'danger')
+        return redirect(url_for('tests_home'))
+    question_id = int(request.form.get('question_id'))
+    selected = request.form.get('answer')
+    if not selected:
+        flash('اختر إجابة.', 'danger')
+        return redirect(url_for('take_test'))
+    current_index = quiz_data['current_index']
+    if current_index >= len(quiz_data['questions']) or quiz_data['questions'][current_index] != question_id:
+        flash('خطأ في الترتيب.', 'danger')
+        return redirect(url_for('tests_home'))
+    quiz_data['answers'][str(question_id)] = selected
+    quiz_data['current_index'] = current_index + 1
+    session['quiz_data'] = quiz_data
+    if quiz_data['current_index'] >= quiz_data['total']:
+        return redirect(url_for('submit_test'))
+    return redirect(url_for('take_test'))
 
-@app.route('/test/answer', methods=['POST'])
+@app.route('/submit_test')
 @login_required
-def test_answer():
-    answer = request.form.get('answer')
-    ids = session.get('test_questions')
-    idx = session.get('current_q_index', 0)
-    if ids and idx < len(ids):
-        question = Question.query.get(ids[idx]['id'])
-        correct = (answer and answer == question.correct_answer)
-        if correct:
-            session['score'] = session.get('score', 0) + 1
-        ans = session.get('answers', [])
-        ans.append({'question_id': ids[idx]['id'], 'user_answer': answer, 'correct': correct})
-        session['answers'] = ans
-    session['current_q_index'] = idx + 1
-    return redirect(url_for('test_question'))
-
-@app.route('/test/result')
-@login_required
-def test_result():
-    score = session.get('score', 0)
-    ids = session.get('test_questions', [])
-    total = len(ids)
-    percentage = (score / total * 100) if total > 0 else 0
-    answers = session.get('answers', [])
-    test_type = session.get('test_type', 'random')
-    result = TestResult(user_id=current_user.id, score=percentage, total_questions=total,
-                        answers=json.dumps(answers), test_type=test_type)
-    db.session.add(result)
-    current_user.level = get_arabic_rank(percentage)
+def submit_test():
+    quiz_data = session.get('quiz_data')
+    if not quiz_data:
+        flash('لا توجد بيانات.', 'danger')
+        return redirect(url_for('tests_home'))
+    answers = quiz_data['answers']
+    question_ids = quiz_data['questions']
+    total = quiz_data['total']
+    correct_count = 0
+    user_answers = []
+    for q_id in question_ids:
+        q = Question.query.get(q_id)
+        if not q: continue
+        selected = answers.get(str(q.id))
+        is_correct = False
+        if selected:
+            is_correct = selected.strip() == q.correct_answer.strip()
+            if is_correct: correct_count += 1
+        user_answers.append({'question_id': q.id, 'selected': selected if selected else '(لم يجب)', 'is_correct': is_correct})
+    score = (correct_count / total) * 100
+    attempt = QuizAttempt(user_id=current_user.id, quiz_type=quiz_data['quiz_type'], lesson_id=quiz_data.get('lesson_id'),
+                        score=score, total_questions=total, correct_count=correct_count, time_taken=0)
+    db.session.add(attempt)
+    db.session.flush()
+    for ua in user_answers:
+        db.session.add(UserAnswer(attempt_id=attempt.id, question_id=ua['question_id'], selected_answer=ua['selected'], is_correct=ua['is_correct']))
+    earned_xp = correct_count * 10
+    current_user.xp_points += earned_xp
+    if current_user.xp_points >= current_user.level * 200:
+        current_user.level += 1
+        flash(f'🎉 ترقيت إلى المستوى {current_user.level}!', 'success')
     db.session.commit()
-    session.pop('test_questions', None)
-    session.pop('current_q_index', None)
-    session.pop('score', None)
-    session.pop('answers', None)
-    session.pop('test_start_time', None)
-    session.pop('test_total_time', None)
-    session.pop('test_type', None)
-    return render_template('test_result.html', score=score, total=total, percentage=percentage,
-                           answers=answers, result_id=result.id, test_type=test_type)
+    log_activity(current_user.id, f'أنهى اختبار {quiz_data["quiz_type"]} بنسبة {score:.1f}%')
+    session.pop('quiz_data', None)
+    flash(f'✅ النتيجة: {score:.1f}%', 'success')
+    return redirect(url_for('test_result', attempt_id=attempt.id))
+
+@app.route('/test_result/<int:attempt_id>')
+@login_required
+def test_result(attempt_id):
+    attempt = QuizAttempt.query.get_or_404(attempt_id)
+    if attempt.user_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    questions_data = []
+    for ua in attempt.answers:
+        q = Question.query.get(ua.question_id)
+        if q:
+            questions_data.append({'question': q, 'selected': ua.selected_answer, 'is_correct': ua.is_correct, 'correct': q.correct_answer})
+    return render_template('test_result.html', attempt=attempt, questions_data=questions_data)
+
+# ========================================================
+# ================ الميزات الجديدة =======================
+# ========================================================
 
 @app.route('/statistics')
 @login_required
 def statistics():
-    total_lessons = Lesson.query.count()
-    completed = LessonProgress.query.filter_by(user_id=current_user.id).count()
-    progress = (completed/total_lessons*100) if total_lessons else 0
-    avg_score = db.session.query(db.func.avg(TestResult.score)).filter_by(user_id=current_user.id).scalar() or 0
-    return render_template('statistics.html', completed=completed, total_lessons=total_lessons,
-                           progress_percent=round(progress,1), avg_score=round(avg_score,1))
+    total_lessons = Lesson.query.filter_by(is_published=True).count()
+    completed_lessons = LessonProgress.query.filter_by(user_id=current_user.id, is_completed=True).count()
+    completion_percentage = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0
+    attempts = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.completed_at).all()
+    attempt_dates = [a.completed_at.strftime('%Y-%m-%d') for a in attempts]
+    attempt_scores = [round(a.score, 1) for a in attempts]
+    quiz_types = ['random', 'speed', 'subject']
+    type_scores = {}
+    for qt in quiz_types:
+        qs = QuizAttempt.query.filter_by(user_id=current_user.id, quiz_type=qt).all()
+        if qs:
+            type_scores[qt] = round(sum(a.score for a in qs) / len(qs), 1)
+        else:
+            type_scores[qt] = 0
+    best_attempt = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.score.desc()).first()
+    best_score = best_attempt.score if best_attempt else 0
+    badge_count = UserBadge.query.filter_by(user_id=current_user.id).count()
+    recent_attempts = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.completed_at.desc()).limit(10).all()
+    return render_template('statistics.html', 
+                         user=current_user,
+                         completion_percentage=round(completion_percentage, 1),
+                         completed_lessons=completed_lessons,
+                         total_lessons=total_lessons,
+                         attempt_dates=attempt_dates,
+                         attempt_scores=attempt_scores,
+                         type_scores=type_scores,
+                         best_score=round(best_score, 1),
+                         badge_count=badge_count,
+                         total_attempts=len(attempts),
+                         recent_attempts=recent_attempts)
 
-@app.route('/chat')
+@app.route('/leaderboard')
 @login_required
-def chat():
-    return render_template('chat.html')
+def leaderboard():
+    top_students = User.query.filter_by(is_admin=False, is_banned=False).order_by(User.xp_points.desc(), User.level.desc()).limit(20).all()
+    ranked_students = []
+    for idx, student in enumerate(top_students, 1):
+        completed = LessonProgress.query.filter_by(user_id=student.id, is_completed=True).count()
+        ranked_students.append({
+            'rank': idx,
+            'user': student,
+            'completed_lessons': completed
+        })
+    return render_template('leaderboard.html', ranked_students=ranked_students)
 
-# ---------- لوحة التحكم ----------
-def admin_required(f):
-    from functools import wraps
-    @wraps(f)
-    @login_required
-    def dec(*a,**k):
-        if current_user.role != 'admin': abort(403)
-        return f(*a,**k)
-    return dec
+@app.route('/student/<int:student_id>')
+@login_required
+def public_profile(student_id):
+    student = User.query.get_or_404(student_id)
+    if student.is_banned and not current_user.is_admin:
+        flash('هذا المستخدم محظور.', 'danger')
+        return redirect(url_for('dashboard'))
+    completed_lessons = LessonProgress.query.filter_by(user_id=student.id, is_completed=True).count()
+    total_lessons = Lesson.query.filter_by(is_published=True).count()
+    recent_attempts = QuizAttempt.query.filter_by(user_id=student.id).order_by(QuizAttempt.completed_at.desc()).limit(5).all()
+    user_badges = UserBadge.query.filter_by(user_id=student.id).all()
+    return render_template('public_profile.html', 
+                         student=student,
+                         completed_lessons=completed_lessons,
+                         total_lessons=total_lessons,
+                         recent_attempts=recent_attempts,
+                         badges=user_badges)
+
+@app.route('/generate_certificate')
+@login_required
+def generate_certificate():
+    total_lessons = Lesson.query.filter_by(is_published=True).count()
+    completed_lessons = LessonProgress.query.filter_by(user_id=current_user.id, is_completed=True).count()
+    has_attempt = QuizAttempt.query.filter_by(user_id=current_user.id).first() is not None
+    if completed_lessons < total_lessons or not has_attempt:
+        flash('⚠️ لا يمكنك الحصول على الشهادة حتى تكمل جميع الدروس وتخوض اختباراً واحداً على الأقل.', 'warning')
+        return redirect(url_for('statistics'))
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_fill_color(245, 247, 250)
+    pdf.rect(10, 10, 277, 190, 'F')
+    pdf.set_draw_color(212, 175, 55)
+    pdf.set_line_width(2)
+    pdf.rect(15, 15, 267, 180)
+    pdf.set_text_color(0, 51, 102)
+    pdf.set_font('Arial', 'B', 36)
+    pdf.cell(0, 40, 'شهادة إتمام', ln=True, align='C')
+    pdf.set_font('Arial', '', 20)
+    pdf.cell(0, 15, 'تُمنح هذه الشهادة إلى:', ln=True, align='C')
+    pdf.set_font('Arial', 'B', 32)
+    pdf.set_text_color(212, 175, 55)
+    pdf.cell(0, 30, current_user.full_name, ln=True, align='C')
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Arial', '', 18)
+    pdf.cell(0, 20, f'بتقدير {current_user.level} ومجموع نقاط {current_user.xp_points} XP', ln=True, align='C')
+    pdf.set_font('Arial', 'I', 14)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 30, f'تم الإصدار في: {datetime.utcnow().strftime("%Y-%m-%d")}', ln=True, align='C')
+    pdf.set_font('Arial', '', 16)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 20, 'مدير المنصة', ln=True, align='C')
+    pdf.line(120, 205, 180, 205)
+    pdf_output = io.BytesIO()
+    pdf_output.write(pdf.output(dest='S').encode('latin1'))
+    pdf_output.seek(0)
+    return send_file(pdf_output, as_attachment=True, download_name=f'شهادة_{current_user.student_id}.pdf', mimetype='application/pdf')
+
+# ========================================================
+# =================== لوحة تحكم المسؤول ===================
+# ========================================================
 
 @app.route('/admin')
+@login_required
 @admin_required
 def admin_dashboard():
-    user_count = User.query.count()
-    lesson_count = Lesson.query.count()
-    test_count = TestResult.query.count()
-    avg_score = db.session.query(db.func.avg(TestResult.score)).scalar() or 0
-    return render_template('admin/dashboard.html', user_count=user_count, lesson_count=lesson_count, test_count=test_count, avg_score=avg_score)
-
-@app.route('/admin/reset_db')
-@admin_required
-def admin_reset_db():
-    try:
-        db.drop_all()
-        db.create_all()
-        seed_database()
-        flash('✅ تم إعادة تعيين قاعدة البيانات بنجاح. تم إنشاء حساب المشرف الافتراضي.', 'success')
-    except Exception as e:
-        flash(f'❌ حدث خطأ أثناء إعادة التعيين: {str(e)}', 'danger')
-    return redirect(url_for('admin_dashboard'))
+    total_users = User.query.count()
+    total_lessons = Lesson.query.count()
+    total_questions = Question.query.count()
+    total_attempts = QuizAttempt.query.count()
+    total_categories = Category.query.count()
+    recent_logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(10).all()
+    return render_template('admin/dashboard.html', 
+                         total_users=total_users, 
+                         total_lessons=total_lessons,
+                         total_questions=total_questions,
+                         total_attempts=total_attempts,
+                         total_categories=total_categories,
+                         recent_logs=recent_logs)
 
 @app.route('/admin/users')
+@login_required
 @admin_required
 def admin_users():
-    users = User.query.order_by(User.last_seen.desc()).all()
+    users = User.query.order_by(User.created_at.desc()).all()
     return render_template('admin/users.html', users=users)
 
-@app.route('/admin/ban/<int:user_id>')
+@app.route('/admin/user/<int:user_id>/toggle_ban', methods=['POST'])
+@login_required
 @admin_required
-def ban_user(user_id):
+def admin_toggle_ban(user_id):
     user = User.query.get_or_404(user_id)
-    user.banned = not user.banned
+    if user.is_admin:
+        flash('لا يمكن حظر المسؤول.', 'danger')
+        return redirect(url_for('admin_users'))
+    user.is_banned = not user.is_banned
     db.session.commit()
-    flash(f'تم تغيير حالة الحظر لـ {user.full_name}', 'success')
+    log_activity(current_user.id, f'{"حظر" if user.is_banned else "فك حظر"} المستخدم {user.student_id}')
+    flash(f'تم {"حظر" if user.is_banned else "فك حظر"} المستخدم.', 'success')
     return redirect(url_for('admin_users'))
 
-@app.route('/admin/recovery-requests')
+@app.route('/admin/user/<int:user_id>/toggle_admin', methods=['POST'])
+@login_required
 @admin_required
-def admin_recovery():
-    requests = RecoveryRequest.query.filter_by(resolved=False).order_by(RecoveryRequest.timestamp.desc()).all()
-    return render_template('admin/recovery_requests.html', requests=requests)
-
-@app.route('/admin/recovery/resolve/<int:req_id>', methods=['POST'])
-@admin_required
-def resolve_recovery(req_id):
-    req = RecoveryRequest.query.get_or_404(req_id)
-    user = User.query.get(req.user_id)
-    if req.type == 'username':
-        flash(f'اسم المستخدم: {user.username} | البريد: {user.email_or_phone}', 'info')
-    else:
-        new_pass = ''.join(random.choices(string.ascii_letters+string.digits, k=8))
-        user.password = generate_password_hash(new_pass)
-        db.session.commit()
-        flash(f'كلمة المرور الجديدة: {new_pass} | تواصل مع {user.email_or_phone}', 'success')
-    req.resolved = True
+def admin_toggle_admin(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('لا يمكن تعديل صلاحيتك الذاتية.', 'danger')
+        return redirect(url_for('admin_users'))
+    user.is_admin = not user.is_admin
     db.session.commit()
-    return redirect(url_for('admin_recovery'))
+    log_activity(current_user.id, f'{"رفع" if user.is_admin else "تنزيل"} صلاحية المستخدم {user.student_id}')
+    flash(f'تم تحديث صلاحية المستخدم.', 'success')
+    return redirect(url_for('admin_users'))
 
-@app.route('/admin/lessons')
+@app.route('/admin/user/<int:user_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.is_admin:
+        flash('لا يمكن حذف المسؤول.', 'danger')
+        return redirect(url_for('admin_users'))
+    db.session.delete(user)
+    db.session.commit()
+    log_activity(current_user.id, f'حذف المستخدم {user.student_id}')
+    flash('تم حذف المستخدم نهائياً.', 'success')
+    return redirect(url_for('admin_users'))
+
+# ==================== إدارة التصنيفات ====================
+@app.route('/admin/categories', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_categories():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description')
+        icon = request.form.get('icon', 'fa-folder')
+        order = request.form.get('order', 0)
+        if not name:
+            flash('اسم التصنيف مطلوب.', 'danger')
+        else:
+            category = Category(name=name, description=description, icon=icon, order=int(order))
+            db.session.add(category)
+            db.session.commit()
+            log_activity(current_user.id, f'أضاف تصنيفاً: {name}')
+            flash('تم إضافة التصنيف.', 'success')
+        return redirect(url_for('admin_categories'))
+    categories = Category.query.order_by(Category.order).all()
+    return render_template('admin/categories.html', categories=categories)
+
+@app.route('/admin/category/<int:category_id>/edit', methods=['POST'])
+@login_required
+@admin_required
+def admin_edit_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    category.name = request.form.get('name')
+    category.description = request.form.get('description')
+    category.icon = request.form.get('icon', 'fa-folder')
+    category.order = int(request.form.get('order', 0))
+    db.session.commit()
+    log_activity(current_user.id, f'عدل تصنيفاً: {category.name}')
+    flash('تم تحديث التصنيف.', 'success')
+    return redirect(url_for('admin_categories'))
+
+@app.route('/admin/category/<int:category_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    db.session.delete(category)
+    db.session.commit()
+    log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
+    flash('تم حذف التصنيف.', 'success')
+    return redirect(url_for('admin_categories'))
+
+# ==================== إدارة الدروس (معدلة مع التصنيفات) ====================
+@app.route('/admin/lessons', methods=['GET', 'POST'])
+@login_required
 @admin_required
 def admin_lessons():
+    if request.method == 'POST':
+        title = request.form.get('title')
+        description = request.form.get('description')
+        content = request.form.get('content')
+        youtube_url = request.form.get('youtube_url')
+        category_id = request.form.get('category_id')
+        order = request.form.get('order', 0)
+        is_published = 'is_published' in request.form
+        if not title:
+            flash('عنوان الدرس مطلوب.', 'danger')
+        else:
+            lesson = Lesson(
+                title=title, 
+                description=description, 
+                content=content,
+                youtube_url=youtube_url,
+                category_id=int(category_id) if category_id else None,
+                order=int(order), 
+                is_published=is_published
+            )
+            db.session.add(lesson)
+            db.session.commit()
+            log_activity(current_user.id, f'أضاف درساً: {title}')
+            flash('تم إضافة الدرس.', 'success')
+        return redirect(url_for('admin_lessons'))
     lessons = Lesson.query.order_by(Lesson.order).all()
-    return render_template('admin/content_lessons.html', lessons=lessons)
+    categories = Category.query.order_by(Category.order).all()
+    return render_template('admin/lessons.html', lessons=lessons, categories=categories)
 
-@app.route('/admin/lesson/add', methods=['POST'])
+@app.route('/admin/lesson/<int:lesson_id>/edit', methods=['POST'])
+@login_required
 @admin_required
-def add_lesson():
-    db.session.add(Lesson(title=request.form['title'], content=request.form['content'], order=int(request.form['order'])))
+def admin_edit_lesson(lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    lesson.title = request.form.get('title')
+    lesson.description = request.form.get('description')
+    lesson.content = request.form.get('content')
+    lesson.youtube_url = request.form.get('youtube_url')
+    lesson.category_id = int(request.form.get('category_id')) if request.form.get('category_id') else None
+    lesson.order = int(request.form.get('order', 0))
+    lesson.is_published = 'is_published' in request.form
     db.session.commit()
+    log_activity(current_user.id, f'عدل درساً: {lesson.title}')
+    flash('تم تحديث الدرس.', 'success')
     return redirect(url_for('admin_lessons'))
 
-@app.route('/admin/lesson/edit/<int:id>', methods=['POST'])
+@app.route('/admin/lesson/<int:lesson_id>/delete', methods=['POST'])
+@login_required
 @admin_required
-def edit_lesson(id):
-    l = Lesson.query.get_or_404(id)
-    l.title = request.form['title']; l.content = request.form['content']; l.order = int(request.form['order'])
+def admin_delete_lesson(lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    db.session.delete(lesson)
     db.session.commit()
+    log_activity(current_user.id, f'حذف درساً: {lesson.title}')
+    flash('تم حذف الدرس.', 'success')
     return redirect(url_for('admin_lessons'))
 
-@app.route('/admin/lesson/delete/<int:id>')
-@admin_required
-def delete_lesson(id):
-    Lesson.query.filter_by(id=id).delete()
-    db.session.commit()
-    return redirect(url_for('admin_lessons'))
-
-@app.route('/admin/questions')
+@app.route('/admin/questions', methods=['GET', 'POST'])
+@login_required
 @admin_required
 def admin_questions():
-    questions = Question.query.all()
-    return render_template('admin/content_questions.html', questions=questions)
-
-@app.route('/admin/question/add', methods=['POST'])
-@admin_required
-def add_question():
-    db.session.add(Question(
-        question_text=request.form['question_text'], question_type=request.form.get('question_type','mcq'),
-        option_a=request.form.get('option_a'), option_b=request.form.get('option_b'),
-        option_c=request.form.get('option_c'), option_d=request.form.get('option_d'),
-        correct_answer=request.form['correct_answer'],
-        lesson_id=request.form.get('lesson_id', type=int)))
-    db.session.commit()
-    return redirect(url_for('admin_questions'))
-
-@app.route('/admin/question/edit/<int:id>', methods=['POST'])
-@admin_required
-def edit_question(id):
-    q = Question.query.get_or_404(id)
-    for f in ['question_text','question_type','option_a','option_b','option_c','option_d','correct_answer','lesson_id']:
-        if f in request.form:
-            val = request.form[f]
-            if f == 'lesson_id':
-                val = int(val) if val else None
-            setattr(q, f, val)
-    db.session.commit()
-    return redirect(url_for('admin_questions'))
-
-@app.route('/admin/question/delete/<int:id>')
-@admin_required
-def delete_question(id):
-    Question.query.filter_by(id=id).delete()
-    db.session.commit()
-    return redirect(url_for('admin_questions'))
-
-@app.route('/admin/resources')
-@admin_required
-def admin_resources():
-    resources = Resource.query.all()
-    return render_template('admin/resource_library.html', resources=resources)
-
-@app.route('/admin/resource/add', methods=['POST'])
-@admin_required
-def add_resource():
-    title = request.form['title']
-    rtype = request.form['type']
-    url = ''
-    if rtype in ('pdf','video'):
-        file = request.files.get('file')
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            url = url_for('static', filename='uploads/'+filename)
-        else:
-            url = request.form.get('url','')
-    else:
-        url = request.form.get('url','')
-    db.session.add(Resource(title=title, type=rtype, url=url))
-    db.session.commit()
-    return redirect(url_for('admin_resources'))
-
-@app.route('/admin/resource/delete/<int:id>')
-@admin_required
-def delete_resource(id):
-    Resource.query.filter_by(id=id).delete()
-    db.session.commit()
-    return redirect(url_for('admin_resources'))
-
-@app.route('/admin/notifications', methods=['GET','POST'])
-@admin_required
-def admin_notifications():
     if request.method == 'POST':
-        msg = request.form['message']
-        for u in User.query.filter_by(role='student').all():
-            db.session.add(Notification(user_id=u.id, content=msg))
-        db.session.commit()
-        flash('تم الإرسال', 'success')
-    return render_template('admin/notifications.html')
+        lesson_id = request.form.get('lesson_id')
+        q_type = request.form.get('type')
+        question_text = request.form.get('question_text')
+        correct_answer = request.form.get('correct_answer')
+        option_a = request.form.get('option_a')
+        option_b = request.form.get('option_b')
+        option_c = request.form.get('option_c')
+        option_d = request.form.get('option_d')
+        difficulty = request.form.get('difficulty', 'medium')
+        if not lesson_id or not question_text or not correct_answer:
+            flash('الحقول المطلوبة: الدرس، نص السؤال، الإجابة الصحيحة.', 'danger')
+        else:
+            q = Question(lesson_id=int(lesson_id), type=q_type, question_text=question_text, correct_answer=correct_answer,
+                       option_a=option_a, option_b=option_b, option_c=option_c, option_d=option_d, difficulty=difficulty)
+            db.session.add(q)
+            db.session.commit()
+            log_activity(current_user.id, f'أضاف سؤالاً للدرس {lesson_id}')
+            flash('تم إضافة السؤال.', 'success')
+        return redirect(url_for('admin_questions'))
+    questions = Question.query.all()
+    lessons = Lesson.query.all()
+    return render_template('admin/questions.html', questions=questions, lessons=lessons)
 
-@app.route('/admin/audit-log')
+@app.route('/admin/question/<int:question_id>/delete', methods=['POST'])
+@login_required
 @admin_required
-def admin_audit():
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(200).all()
-    return render_template('admin/audit_log.html', logs=logs)
+def admin_delete_question(question_id):
+    q = Question.query.get_or_404(question_id)
+    db.session.delete(q)
+    db.session.commit()
+    log_activity(current_user.id, f'حذف سؤالاً رقم {question_id}')
+    flash('تم حذف السؤال.', 'success')
+    return redirect(url_for('admin_questions'))
 
-@app.route('/admin/announcements', methods=['GET','POST'])
+@app.route('/admin/announcements', methods=['GET', 'POST'])
+@login_required
 @admin_required
 def admin_announcements():
     if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-        db.session.add(Announcement(title=title, content=content))
-        db.session.commit()
-        flash('تم إضافة الإعلان', 'success')
-    anns = Announcement.query.order_by(Announcement.created_at.desc()).all()
-    return render_template('admin/announcements.html', announcements=anns)
+        title = request.form.get('title')
+        content = request.form.get('content')
+        if title and content:
+            ann = Announcement(title=title, content=content, created_by=current_user.id)
+            db.session.add(ann)
+            db.session.commit()
+            log_activity(current_user.id, f'أضاف إعلاناً: {title}')
+            flash('تم نشر الإعلان.', 'success')
+        else:
+            flash('العنوان والمحتوى مطلوبان.', 'danger')
+        return redirect(url_for('admin_announcements'))
+    announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
+    return render_template('admin/announcements.html', announcements=announcements)
 
-# ---------- WebSocket ----------
-@socketio.on('connect')
-def handle_connect():
-    if current_user.is_authenticated and not current_user.banned:
-        current_user.status = 'متصل'
-        current_user.last_seen = datetime.utcnow()
-        db.session.commit()
-        online_users.setdefault(current_user.id, set()).add(request.sid)
-        emit('update_online', get_online_users_with_status(), broadcast=True)
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    if current_user.is_authenticated:
-        if current_user.id in online_users:
-            online_users[current_user.id].discard(request.sid)
-            if not online_users[current_user.id]:
-                del online_users[current_user.id]
-                current_user.status = 'غير متصل'
-                current_user.last_seen = datetime.utcnow()
-                db.session.commit()
-                emit('update_online', get_online_users_with_status(), broadcast=True)
-
-def get_online_users_with_status():
-    result = []
-    for uid in online_users:
-        u = User.query.get(uid)
-        if u:
-            result.append({
-                'id': uid,
-                'name': u.full_name if u.show_real_name else u.username,
-                'status': u.status,
-                'last_seen': u.last_seen.strftime('%H:%M') if u.last_seen else ''
-            })
-    return result
-
-@socketio.on('send_message')
-def handle_message(data):
-    if not current_user.is_authenticated or current_user.banned: return
-    text = data.get('text','').strip()
-    recipient_id = data.get('recipient_id')
-    reply_to = data.get('reply_to')
-    if not text and not data.get('file'): return
-    msg = Message(sender_id=current_user.id, text=text)
-    if recipient_id: msg.recipient_id = int(recipient_id)
-    if reply_to: msg.reply_to_id = int(reply_to)
-    db.session.add(msg)
+@app.route('/admin/announcement/<int:ann_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_announcement(ann_id):
+    ann = Announcement.query.get_or_404(ann_id)
+    db.session.delete(ann)
     db.session.commit()
-    sender_name = current_user.full_name if current_user.show_real_name else current_user.username
-    sender_pic = current_user.profile_pic if current_user.profile_pic != 'default.png' else ''
-    msg_data = {
-        'id': msg.id, 'sender_id': current_user.id, 'sender_name': sender_name,
-        'sender_pic': sender_pic, 'text': msg.text, 'timestamp': msg.timestamp.strftime('%H:%M'),
-        'reply_to': msg.reply_to_id, 'edited': False, 'file_path': None,
-        'recipient_id': msg.recipient_id
-    }
-    if recipient_id:
-        emit('new_private_message', msg_data, room=f'user_{recipient_id}')
-        emit('new_private_message', msg_data, room=request.sid)
-    else:
-        emit('new_message', msg_data, broadcast=True)
+    log_activity(current_user.id, f'حذف إعلاناً')
+    flash('تم حذف الإعلان.', 'success')
+    return redirect(url_for('admin_announcements'))
 
-@socketio.on('edit_message')
-def handle_edit(data):
-    if not current_user.is_authenticated: return
-    msg_id = data.get('message_id')
-    new_text = data.get('text','').strip()
-    msg = Message.query.get(msg_id)
-    if not msg: return
-    if current_user.role == 'admin' or (msg.sender_id == current_user.id and (datetime.utcnow() - msg.timestamp).seconds < 300):
-        msg.text = new_text
-        msg.edited = True
-        msg.edited_at = datetime.utcnow()
-        db.session.commit()
-        emit('message_edited', {'message_id': msg_id, 'text': new_text}, broadcast=True)
-
-@socketio.on('delete_message')
-def handle_delete(data):
-    if not current_user.is_authenticated: return
-    msg_id = data.get('message_id')
-    msg = Message.query.get(msg_id)
-    if not msg: return
-    if current_user.role == 'admin' or (msg.sender_id == current_user.id and (datetime.utcnow() - msg.timestamp).seconds < 300):
-        db.session.delete(msg)
-        db.session.commit()
-        emit('message_deleted', {'message_id': msg_id}, broadcast=True)
-
-@app.route('/upload_chat_file', methods=['POST'])
+@app.route('/admin/audit_log')
 @login_required
-def upload_chat_file():
-    file = request.files.get('file')
-    if file and allowed_file(file.filename):
-        filename = secure_filename(f"{current_user.id}_{int(time.time())}_{file.filename}")
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        msg = Message(sender_id=current_user.id, text='', file_path=filename)
-        recipient_id = request.form.get('recipient_id')
-        if recipient_id:
-            msg.recipient_id = int(recipient_id)
-        db.session.add(msg)
-        db.session.commit()
-        file_url = url_for('static', filename='uploads/'+filename)
-        sender_name = current_user.full_name if current_user.show_real_name else current_user.username
-        msg_data = {
-            'id': msg.id, 'sender_id': current_user.id, 'sender_name': sender_name,
-            'text': '', 'timestamp': msg.timestamp.strftime('%H:%M'),
-            'file_path': file_url, 'edited': False, 'recipient_id': msg.recipient_id
-        }
-        socketio.emit('new_message', msg_data, broadcast=True)
-        return jsonify({'success': True, 'file_url': file_url})
-    return jsonify({'success': False})
+@admin_required
+def admin_audit_log():
+    logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(100).all()
+    return render_template('admin/audit_log.html', logs=logs)
 
-@app.route('/api/messages')
+@app.route('/admin/recovery_requests')
 @login_required
-def api_messages():
-    msgs = Message.query.filter((Message.recipient_id.is_(None)) | (Message.recipient_id == current_user.id) | (Message.sender_id == current_user.id)).order_by(Message.timestamp.asc()).all()
-    res = []
-    for m in msgs:
-        s = m.sender
-        sname = s.full_name if s.show_real_name else s.username
-        spic = s.profile_pic if s.profile_pic != 'default.png' else ''
-        res.append({
-            'id': m.id, 'sender_id': m.sender_id, 'sender_name': sname,
-            'sender_pic': spic,
-            'text': m.text, 'timestamp': m.timestamp.strftime('%H:%M'),
-            'reply_to': m.reply_to_id, 'edited': m.edited,
-            'file_path': url_for('static', filename='uploads/'+m.file_path) if m.file_path else None,
-            'recipient_id': m.recipient_id
-        })
-    return jsonify(res)
+@admin_required
+def admin_recovery_requests():
+    requests = PasswordResetRequest.query.filter_by(is_used=False).order_by(PasswordResetRequest.created_at.desc()).all()
+    return render_template('admin/recovery_requests.html', requests=requests)
 
-@app.route('/api/users')
+@app.route('/admin/recovery_request/<int:req_id>/mark_used', methods=['POST'])
 @login_required
-def api_users():
-    users = User.query.filter(User.id != current_user.id, User.banned == False).all()
-    return jsonify([{'id': u.id, 'name': u.full_name if u.show_real_name else u.username, 'status': u.status, 'last_seen': u.last_seen.strftime('%H:%M') if u.last_seen else ''} for u in users])
+@admin_required
+def admin_mark_recovery_used(req_id):
+    req = PasswordResetRequest.query.get_or_404(req_id)
+    req.is_used = True
+    db.session.commit()
+    log_activity(current_user.id, f'تم استهلاك طلب استعادة للمستخدم {req.user_id}')
+    flash('تم تحديث الطلب.', 'success')
+    return redirect(url_for('admin_recovery_requests'))
 
+@app.route('/admin/reset_db', methods=['POST'])
+@login_required
+@admin_required
+def admin_reset_db():
+    db.drop_all()
+    db.create_all()
+    
+    # إنشاء المسؤول
+    admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
+    admin.set_password('admin123')
+    db.session.add(admin)
+    db.session.commit()
+    
+    # ======================== إنشاء التصنيفات ========================
+    categories_data = [
+        {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
+        {'name': 'قواعد البيانات', 'description': 'تعلم قواعد البيانات SQL و NoSQL', 'icon': 'fa-database', 'order': 2},
+        {'name': 'الخوارزميات', 'description': 'فهم الخوارزميات وتصميم الحلول', 'icon': 'fa-brain', 'order': 3},
+        {'name': 'برامج النظام', 'description': 'تعلم استخدام برامج الكمبيوتر الأساسية', 'icon': 'fa-desktop', 'order': 4},
+        {'name': 'شبكات الحاسوب', 'description': 'أساسيات الشبكات والاتصالات', 'icon': 'fa-network-wired', 'order': 5},
+    ]
+    
+    created_categories = {}
+    for cat_data in categories_data:
+        cat = Category(**cat_data)
+        db.session.add(cat)
+        db.session.flush()
+        created_categories[cat_data['name']] = cat.id
+    
+    # ======================== إنشاء الدروس ========================
+    lessons_data = [
+        # التصنيف 1: أساسيات البرمجة
+        {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
+         'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
+         'youtube': 'https://www.youtube.com/embed/HB4I2C2n7qg?si=ixHZkDQKR0uw5Q7V', 'order': 1},
+        
+        # التصنيف 4: برامج النظام
+        {'category': 'برامج النظام', 'title': 'برنامج الدفتر (Notepad)', 'description': 'تعلم استخدام برنامج الدفتر لكتابة النصوص',
+         'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق. يستخدم لكتابة الملاحظات السريعة والأكواد البرمجية.</p>',
+         'youtube': 'https://www.youtube.com/embed/abc123', 'order': 1},
+        
+        {'category': 'برامج النظام', 'title': 'برنامج الرسام (Paint)', 'description': 'تعلم استخدام برنامج الرسام للرسم والتصميم',
+         'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي. يمكنك من رسم أشكال وتحرير الصور.</p>',
+         'youtube': 'https://www.youtube.com/embed/def456', 'order': 2},
+        
+        {'category': 'برامج النظام', 'title': 'برنامج الملاحظات (Sticky Notes)', 'description': 'تعلم استخدام الملاحظات اللاصقة الرقمية',
+         'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة وتثبيتها على سطح المكتب.</p>',
+         'youtube': 'https://www.youtube.com/embed/ghi789', 'order': 3},
+        
+        {'category': 'برامج النظام', 'title': 'مسجل الصوت (Sound Recorder)', 'description': 'تعلم استخدام مسجل الصوت لتسجيل الأصوات',
+         'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون أو مصادر الصوت الأخرى.</p>',
+         'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
+    ]
+    
+    lesson_ids = {}
+    for lesson_data in lessons_data:
+        cat_name = lesson_data.pop('category')
+        lesson = Lesson(
+            category_id=created_categories[cat_name],
+            title=lesson_data['title'],
+            description=lesson_data['description'],
+            content=lesson_data['content'],
+            youtube_url=lesson_data['youtube'],
+            order=lesson_data['order'],
+            is_published=True
+        )
+        db.session.add(lesson)
+        db.session.flush()
+        lesson_ids[lesson_data['title']] = lesson.id
+    
+    # ======================== إنشاء الأسئلة ========================
+    questions_data = [
+        # أسئلة البرمجة
+        {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
+         'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
+        {'lesson': 'مقدمة في البرمجة', 'type': 'TRUE_FALSE', 'text': 'المتغير يمكن أن يحمل قيماً مختلفة أثناء تنفيذ البرنامج.',
+         'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
+        
+        # أسئلة الدفتر
+        {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'MCQ', 'text': 'ما هي اختصار حفظ ملف في الدفتر؟',
+         'a': 'Ctrl+S', 'b': 'Ctrl+O', 'c': 'Ctrl+N', 'd': 'Ctrl+P', 'correct': 'Ctrl+S', 'difficulty': 'easy'},
+        {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'TRUE_FALSE', 'text': 'الدفتر يدعم تنسيق النصوص مثل الألوان والخطوط.',
+         'a': 'صحيح', 'b': 'خطأ', 'correct': 'خطأ', 'difficulty': 'easy'},
+        
+        # أسئلة الرسام
+        {'lesson': 'برنامج الرسام (Paint)', 'type': 'MCQ', 'text': 'ما هي أداة الرسم التي تستخدم لرسم خطوط مستقيمة؟',
+         'a': 'الخط', 'b': 'المنحنى', 'c': 'القلم الرصاص', 'd': 'الفرشاة', 'correct': 'الخط', 'difficulty': 'easy'},
+        {'lesson': 'برنامج الرسام (Paint)', 'type': 'TRUE_FALSE', 'text': 'يمكنك تغيير حجم الصورة في برنامج الرسام.',
+         'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
+        
+        # أسئلة الملاحظات
+        {'lesson': 'برنامج الملاحظات (Sticky Notes)', 'type': 'MCQ', 'text': 'ما هي اختصار إنشاء ملاحظة جديدة؟',
+         'a': 'Ctrl+N', 'b': 'Ctrl+O', 'c': 'Ctrl+S', 'd': 'Ctrl+P', 'correct': 'Ctrl+N', 'difficulty': 'easy'},
+        
+        # أسئلة مسجل الصوت
+        {'lesson': 'مسجل الصوت (Sound Recorder)', 'type': 'MCQ', 'text': 'ما هو الزر المستخدم لبدء التسجيل؟',
+         'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
+         'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
+    ]
+    
+    for q in questions_data:
+        lesson_title = q.pop('lesson')
+        question = Question(
+            lesson_id=lesson_ids.get(lesson_title),
+            type=q['type'],
+            question_text=q['text'],
+            option_a=q.get('a'),
+            option_b=q.get('b'),
+            option_c=q.get('c'),
+            option_d=q.get('d'),
+            correct_answer=q['correct'],
+            difficulty=q['difficulty']
+        )
+        db.session.add(question)
+    
+    db.session.commit()
+    log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس جديدة')
+    flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+# ==================== نقطة التشغيل ====================
 if __name__ == '__main__':
     with app.app_context():
-        seed_database()
-    port = int(os.environ.get("PORT", 5000))
-    print(f"✅ الموقع يعمل على المنفذ: {port}")
-    socketio.run(app, host="0.0.0.0", port=port, debug=False)
+        db.create_all()
+        if not User.query.filter_by(email='admin@mycourse.com').first():
+            admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            print("✅ Admin: admin@mycourse.com / admin123")
+        if Category.query.count() == 0:
+            print("⚠️ لا توجد تصنيفات. استخدم زر 'إعادة تعيين قاعدة البيانات' في لوحة المسؤول.")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)

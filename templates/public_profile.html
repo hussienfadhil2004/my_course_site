@@ -1,11 +1,67 @@
 {% extends "base.html" %}
+
+{% block title %}ملف {{ student.full_name }}{% endblock %}
+
 {% block content %}
-<div class="card p-3">
-    <img src="{{ url_for('static', filename='uploads/'+user.profile_pic) }}" class="rounded-circle mx-auto d-block" width="100">
-    <h3 class="text-center">{% if user.show_real_name %}{{ user.full_name }}{% else %}{{ user.username }}{% endif %}</h3>
-    <p class="text-center">{{ user.bio }}</p>
-    {% if user.telegram_link %}<a href="{{ user.telegram_link }}" class="btn btn-info btn-sm">تيليجرام</a>{% endif %}
-    {% if user.whatsapp_link %}<a href="{{ user.whatsapp_link }}" class="btn btn-success btn-sm">واتساب</a>{% endif %}
-    <p>المستوى: {{ user.level }}</p>
+<div class="row">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 text-center p-4">
+            <img src="{{ url_for('static', filename='uploads/' + student.profile_pic) }}" 
+                 class="rounded-circle mx-auto border border-3 border-primary" 
+                 style="width:150px;height:150px;object-fit:cover;">
+            <h4 class="mt-3 fw-bold">{{ student.full_name }}</h4>
+            <p class="text-muted"><i class="fas fa-id-card me-1"></i> {{ student.student_id }}</p>
+            <p class="badge bg-info text-dark"><i class="fas fa-star me-1"></i> المستوى {{ student.level }} | نقاط: {{ student.xp_points }}</p>
+            {% if student.bio %}
+            <hr>
+            <p class="text-muted small">{{ student.bio }}</p>
+            {% endif %}
+            <div class="mt-2">
+                <span class="badge bg-secondary me-1"><i class="fas fa-book me-1"></i> {{ completed_lessons }}/{{ total_lessons }} دروس</span>
+                <span class="badge bg-secondary"><i class="fas fa-puzzle-piece me-1"></i> {{ badges|length }} شارة</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-transparent">
+                <h5 class="fw-bold mb-0"><i class="fas fa-clock me-2"></i>آخر الاختبارات</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for a in recent_attempts %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-info me-2">{{ a.quiz_type }}</span>
+                            <small>{{ a.completed_at.strftime('%Y-%m-%d') }}</small>
+                        </div>
+                        <span class="fw-bold {% if a.score >= 80 %}text-success{% elif a.score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ a.score|round(1) }}%
+                        </span>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item text-muted">لا توجد اختبارات بعد.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <!-- الشارات -->
+        <div class="card shadow-sm border-0 mt-3">
+            <div class="card-header bg-transparent">
+                <h5 class="fw-bold mb-0"><i class="fas fa-medal me-2 text-warning"></i>الشارات</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for ub in badges %}
+                    <span class="badge bg-warning text-dark p-2 fs-6">
+                        <i class="fas fa-{{ ub.badge.icon }} me-1"></i> {{ ub.badge.name }}
+                    </span>
+                    {% else %}
+                    <span class="text-muted">لم يحصل على شارات بعد.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

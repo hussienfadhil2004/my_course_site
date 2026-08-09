@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}جميع الدروس{% endblock %}
+{% block title %}{{ category.name }}{% endblock %}
 
 {% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('categories_list') }}">التصنيفات</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ category.name }}</li>
+    </ol>
+</nav>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold"><i class="fas fa-book-open me-2 text-primary"></i>الدروس التعليمية</h2>
+    <div>
+        <h2 class="fw-bold"><i class="fas {{ category.icon or 'fa-folder' }} me-2 text-primary"></i>{{ category.name }}</h2>
+        <p class="text-muted">{{ category.description or '' }}</p>
+    </div>
     <span class="badge bg-secondary p-2">{{ lessons|length }} درس</span>
 </div>
 
@@ -34,12 +44,11 @@
     {% else %}
     <div class="col-12 text-center py-5">
         <i class="fas fa-book fa-4x text-muted mb-3"></i>
-        <h4>لا توجد دروس حالياً</h4>
+        <h4>لا توجد دروس في هذا التصنيف</h4>
         <p class="text-muted">سيتم إضافة الدروس قريباً</p>
     </div>
     {% endfor %}
 </div>
-{% endblock %}
 
 <style>
 .hover-lift {
@@ -50,3 +59,4 @@
     box-shadow: 0 12px 30px rgba(0,0,0,0.15) !important;
 }
 </style>
+{% endblock %}

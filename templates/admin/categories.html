@@ -1,0 +1,42 @@
+{% extends "admin/admin_base.html" %}
+
+{% block admin_content %}
+<h4 class="fw-bold mb-4"><i class="fas fa-th-large me-2 text-primary"></i>إدارة التصنيفات</h4>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5>إضافة تصنيف جديد</h5>
+        <form method="POST">
+            <div class="row g-2">
+                <div class="col-md-3"><input class="form-control" name="name" placeholder="اسم التصنيف" required></div>
+                <div class="col-md-4"><input class="form-control" name="description" placeholder="الوصف"></div>
+                <div class="col-md-2"><input class="form-control" name="icon" placeholder="أيقونة (fa-xxx)" value="fa-folder"></div>
+                <div class="col-md-1"><input class="form-control" name="order" type="number" placeholder="ترتيب"></div>
+                <div class="col-md-2"><button class="btn btn-success w-100">إضافة</button></div>
+            </div>
+        </form>
+        <small class="text-muted">الأيقونات من Font Awesome (مثل: fa-code, fa-database, fa-desktop)</small>
+    </div>
+</div>
+
+<div class="list-group">
+    {% for c in categories %}
+    <div class="list-group-item">
+        <form method="POST" action="{{ url_for('admin_edit_category', category_id=c.id) }}" class="row g-2 align-items-center">
+            <div class="col-md-2"><input class="form-control form-control-sm" name="name" value="{{ c.name }}" required></div>
+            <div class="col-md-3"><input class="form-control form-control-sm" name="description" value="{{ c.description or '' }}"></div>
+            <div class="col-md-2"><input class="form-control form-control-sm" name="icon" value="{{ c.icon or 'fa-folder' }}"></div>
+            <div class="col-md-1"><input class="form-control form-control-sm" name="order" type="number" value="{{ c.order }}"></div>
+            <div class="col-md-2">
+                <span class="badge bg-info">{{ c.lessons|length }} دروس</span>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-sm btn-primary">تعديل</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="if(confirm('حذف التصنيف؟')) document.getElementById('del-{{ c.id }}').submit();">حذف</button>
+                <form id="del-{{ c.id }}" method="POST" action="{{ url_for('admin_delete_category', category_id=c.id) }}" style="display:none;"></form>
+            </div>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

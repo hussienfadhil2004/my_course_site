@@ -1,11 +1,7 @@
 venv/
-env/
 __pycache__/
-*.pyc
-*.pyo
-*.db
-.vscode/
-.idea/
-static/uploads/*
-!static/uploads/default.png
-computer_course_site/
+instance/
+*.sqlite
+*.sqlite3
+.env
+static/uploads/

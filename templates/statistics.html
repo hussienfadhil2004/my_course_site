@@ -1,50 +1,124 @@
 {% extends "base.html" %}
+
+{% block title %}إحصائياتي{% endblock %}
+
 {% block content %}
-<h2>📊 إحصائياتي</h2>
-<div class="row">
-  <div class="col-md-6">
-    <div class="card p-3 mb-3">
-      <h5>الدروس المكتملة</h5>
-      <p class="display-4">{{ completed }} / {{ total_lessons }}</p>
-      <div class="progress" style="height: 25px;">
-        <div class="progress-bar bg-success" style="width: {{ progress_percent }}%;">
-          {{ progress_percent }}%
+<h2 class="fw-bold mb-4"><i class="fas fa-chart-line me-2 text-primary"></i>إحصائيات التقدم</h2>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3 text-center">
+            <h6 class="text-muted">التقدم في الدروس</h6>
+            <h2 class="text-primary">{{ completion_percentage }}%</h2>
+            <small>{{ completed_lessons }} من {{ total_lessons }} درس</small>
         </div>
-      </div>
     </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card p-3 mb-3">
-      <h5>متوسط درجات الاختبارات</h5>
-      <p class="display-4">{{ avg_score }}%</p>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3 text-center">
+            <h6 class="text-muted">أفضل نتيجة</h6>
+            <h2 class="text-success">{{ best_score }}%</h2>
+        </div>
     </div>
-  </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3 text-center">
+            <h6 class="text-muted">عدد الاختبارات</h6>
+            <h2 class="text-info">{{ total_attempts }}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3 text-center">
+            <h6 class="text-muted">الشارات</h6>
+            <h2 class="text-warning">{{ badge_count }}</h2>
+        </div>
+    </div>
 </div>
 
-<div class="card p-3 mb-3">
-  <h5>ترتيبك بين الطلاب</h5>
-  {% if rank %}
-    <p class="display-4">#{{ rank }}</p>
-  {% else %}
-    <p>لا يوجد ترتيب بعد (قم بإنهاء الاختبارات أولاً).</p>
-  {% endif %}
+<div class="row g-4">
+    <!-- توزيع الدرجات حسب نوع الاختبار -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h6 class="fw-bold mb-0">متوسط الدرجات حسب النوع</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>عشوائي</span>
+                        <span class="fw-bold">{{ type_scores.random }}%</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>سرعة</span>
+                        <span class="fw-bold">{{ type_scores.speed }}%</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>حسب الموضوع</span>
+                        <span class="fw-bold">{{ type_scores.subject }}%</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- منحنى التقدم في الاختبارات -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h6 class="fw-bold mb-0">تطور الدرجات في الاختبارات</h6>
+            </div>
+            <div class="card-body">
+                {% if attempt_scores %}
+                <div style="height:150px; display:flex; align-items:flex-end; gap:4px; padding:10px 0;">
+                    {% for score in attempt_scores %}
+                    <div style="flex:1; background-color: {% if score >= 80 %}#28a745{% elif score >= 50 %}#ffc107{% else %}#dc3545{% endif %}; height: {{ score }}%; min-height:5px; border-radius:4px 4px 0 0;" title="{{ score }}%"></div>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between text-muted small">
+                    <span>أقدم</span>
+                    <span>أحدث</span>
+                </div>
+                {% else %}
+                <p class="text-muted text-center">لا توجد بيانات كافية لعرض الرسم البياني.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="card p-3 mb-3">
-  <h5>آخر نتائج الاختبارات</h5>
-  {% if last_results %}
-  <ul class="list-group">
-    {% for r in last_results %}
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-      {{ r.timestamp.strftime('%Y-%m-%d %H:%M') }}
-      <span class="badge bg-primary rounded-pill">{{ r.score }}%</span>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-    <p>لا توجد نتائج بعد.</p>
-  {% endif %}
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-transparent d-flex justify-content-between">
+        <h6 class="fw-bold mb-0">آخر الاختبارات</h6>
+        <span class="badge bg-secondary">{{ total_attempts }} محاولة</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+            {% for a in recent_attempts %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge bg-info me-2">{{ a.quiz_type }}</span>
+                    <small>{{ a.completed_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <span class="fw-bold {% if a.score >= 80 %}text-success{% elif a.score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                    {{ a.score|round(1) }}%
+                </span>
+            </div>
+            {% else %}
+            <div class="list-group-item text-muted">لا توجد اختبارات حتى الآن.</div>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
-<a href="/certificate" class="btn btn-success">📜 تحميل الشهادة</a>
+<div class="mt-4">
+    {% if completed_lessons == total_lessons and total_attempts > 0 %}
+    <a href="{{ url_for('generate_certificate') }}" class="btn btn-lg btn-success">
+        <i class="fas fa-file-pdf me-2"></i> تحميل شهادتي (PDF)
+    </a>
+    <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> أنت مؤهل للحصول على الشهادة!</p>
+    {% else %}
+    <div class="alert alert-secondary">
+        <i class="fas fa-lock me-2"></i>
+        لإصدار الشهادة، أكمل جميع الدروس ({{ completed_lessons }}/{{ total_lessons }}) واخض اختباراً واحداً على الأقل.
+    </div>
+    {% endif %}
+</div>
 {% endblock %}

@@ -1,57 +1,143 @@
 {% extends "base.html" %}
+
+{% block title %}الاختبار{% endblock %}
+
+{% block head %}
+<style>
+    .option-btn {
+        transition: all 0.2s ease;
+        border: 2px solid #e9ecef;
+        background: white;
+    }
+    .option-btn:hover {
+        border-color: #0d6efd;
+        background: #f0f7ff;
+        transform: scale(1.02);
+    }
+    .option-btn.selected {
+        border-color: #0d6efd;
+        background: #cfe2ff;
+        font-weight: bold;
+    }
+    .timer-danger {
+        color: #dc3545;
+        animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-{% if lesson %}
-    <h5>اختبار: {{ lesson.title }}</h5>
-{% else %}
-    {% if test_type == 'speed' %}
-        <h5>⚡ اختبار سرعة</h5>
-    {% elif test_type == 'random' %}
-        <h5>🎲 اختبار عشوائي شامل</h5>
-    {% endif %}
-{% endif %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-lg border-0">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <span class="fw-bold">
+                    <i class="fas fa-question-circle me-2 text-primary"></i>
+                    السؤال {{ current_index }} من {{ total }}
+                </span>
+                <span>
+                    {% if quiz_type == 'speed' %}
+                    <span id="timerDisplay" class="badge bg-warning text-dark p-2">
+                        <i class="fas fa-clock me-1"></i> ⏱️ <span id="timerSeconds">30</span> ثانية
+                    </span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body p-4">
+                <!-- السؤال -->
+                <h5 class="fw-bold mb-4">{{ question.question_text }}</h5>
 
-<h3>سؤال {{ index }} من {{ total }}</h3>
-<p>{{ question.question_text }}</p>
-
-<p>الوقت المتبقي: <span id="timer">{{ remaining // 60 }}:{{ '%02d' % (remaining % 60) }}</span></p>
-
-<div id="time-data" data-remaining="{{ remaining }}" style="display:none;"></div>
-
-<form method="POST" action="/test/answer">
-    {% if question.question_type == 'tf' %}
-    <div class="form-check">
-        <input class="form-check-input" type="radio" name="answer" value="t" id="ans_t" required>
-        <label class="form-check-label" for="ans_t">✅ صح</label>
+                <!-- الخيارات -->
+                <form method="POST" action="{{ url_for('submit_answer') }}" id="answerForm">
+                    <input type="hidden" name="question_id" value="{{ question.id }}">
+                    
+                    <div class="d-grid gap-2">
+                        {% for option in options %}
+                        <button type="button" class="btn btn-light option-btn p-3 text-start" 
+                                onclick="selectOption(this, '{{ option }}')">
+                            <i class="far fa-circle me-2"></i> {{ option }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    
+                    <input type="hidden" name="answer" id="selectedAnswer" required>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {% if quiz_type == 'speed' %}اختر الإجابة قبل نفاد الوقت!{% else %}اختر إجابة ثم اضغط "التالي".{% endif %}
+                        </span>
+                        <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
+                            <i class="fas fa-arrow-left me-2"></i>التالي
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- شريط التقدم -->
+        <div class="progress mt-3" style="height: 8px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                 role="progressbar" style="width: {{ (current_index / total) * 100 }}%;">
+            </div>
+        </div>
     </div>
-    <div class="form-check">
-        <input class="form-check-input" type="radio" name="answer" value="f" id="ans_f">
-        <label class="form-check-label" for="ans_f">❌ خطأ</label>
-    </div>
-    {% else %}
-    <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="a" id="a" required><label class="form-check-label" for="a">{{ question.option_a }}</label></div>
-    <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="b" id="b"><label class="form-check-label" for="b">{{ question.option_b }}</label></div>
-    <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="c" id="c"><label class="form-check-label" for="c">{{ question.option_c }}</label></div>
-    <div class="form-check"><input class="form-check-input" type="radio" name="answer" value="d" id="d"><label class="form-check-label" for="d">{{ question.option_d }}</label></div>
-    {% endif %}
-    <button class="btn btn-primary mt-2">التالي ←</button>
-</form>
+</div>
 
 <script>
-(function() {
-    const timeData = document.getElementById('time-data');
-    const remaining = parseInt(timeData.getAttribute('data-remaining'), 10);
-    const timerEl = document.getElementById('timer');
-    let timeLeft = remaining;
+    // ========== اختيار الإجابة ==========
+    function selectOption(btn, value) {
+        // إزالة التحديد السابق
+        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        document.getElementById('selectedAnswer').value = value;
+    }
 
-    setInterval(function() {
-        if (timeLeft <= 0) {
-            window.location.href = '/test/result';
+    // ========== مؤقت اختبار السرعة (30 ثانية) ==========
+    {% if quiz_type == 'speed' %}
+    let timeLeft = 30;
+    const timerSpan = document.getElementById('timerSeconds');
+    const timerDisplay = document.getElementById('timerDisplay');
+    
+    const timerInterval = setInterval(function() {
+        timeLeft -= 1;
+        timerSpan.textContent = timeLeft;
+        
+        if (timeLeft <= 5) {
+            timerDisplay.classList.add('timer-danger');
         }
-        timeLeft--;
-        const mins = Math.floor(timeLeft / 60);
-        const secs = timeLeft % 60;
-        timerEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+        
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            // إرسال النموذج تلقائياً مع الإجابة المختارة (أو فارغة)
+            const form = document.getElementById('answerForm');
+            // إذا لم يختر شيئاً، نضع قيمة افتراضية لتجنب الخطأ
+            if (!document.getElementById('selectedAnswer').value) {
+                // اختيار أول خيار افتراضي (لتفادي تعطيل السيرفر)
+                const firstOption = document.querySelector('.option-btn');
+                if (firstOption) {
+                    selectOption(firstOption, firstOption.innerText.trim());
+                } else {
+                    document.getElementById('selectedAnswer').value = 'لم يختر';
+                }
+            }
+            form.submit();
+        }
     }, 1000);
-})();
+    {% endif %}
+
+    // ========== منع إعادة التحميل بالضغط على Enter ==========
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('submitBtn').click();
+        }
+    });
 </script>
 {% endblock %}

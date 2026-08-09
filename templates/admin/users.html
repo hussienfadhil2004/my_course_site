@@ -1,43 +1,40 @@
 {% extends "admin/admin_base.html" %}
+
 {% block admin_content %}
-<h3>👥 المستخدمين</h3>
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>المعرف</th>
-            <th>الاسم الكامل</th>
-            <th>اسم المستخدم</th>
-            <th>البريد / الهاتف</th>
-            <th>الدور</th>
-            <th>الحالة</th>
-            <th>آخر ظهور</th>
-            <th>إجراءات</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for u in users %}
-    <tr>
-        <td>{{ u.student_id }}</td>
-        <td>{{ u.full_name }}</td>
-        <td>{{ u.username }}</td>
-        <td><small>{{ u.email_or_phone }}</small></td>
-        <td><span class="badge bg-{{ 'success' if u.role == 'admin' else 'primary' }}">{{ u.role }}</span></td>
-        <td>
-            {% if u.banned %}
-                <span class="badge bg-danger">محظور</span>
-            {% else %}
-                <span class="badge bg-success">نشط</span>
-            {% endif %}
-        </td>
-        <td>{{ u.last_seen.strftime('%Y-%m-%d %H:%M') if u.last_seen else '—' }}</td>
-        <td>
-            <a href="/student/{{ u.id }}" class="btn btn-sm btn-info">👤</a>
-            <a href="/admin/ban/{{ u.id }}" class="btn btn-sm btn-{{ 'warning' if not u.banned else 'secondary' }}">
-                {{ '🚫 حظر' if not u.banned else '✅ فك الحظر' }}
-            </a>
-        </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
+<h4 class="fw-bold mb-4"><i class="fas fa-users me-2 text-primary"></i>إدارة المستخدمين</h4>
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr><th>#</th><th>المعرف</th><th>الاسم</th><th>الإيميل</th><th>الهاتف</th><th>المستوى</th><th>الحالة</th><th>الإجراءات</th></tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.student_id }}</td>
+                <td>{{ u.full_name }}</td>
+                <td>{{ u.email }}</td>
+                <td>{{ u.phone or '-' }}</td>
+                <td>{{ u.level }}</td>
+                <td>{% if u.is_banned %}<span class="badge bg-danger">محظور</span>{% else %}<span class="badge bg-success">نشط</span>{% endif %}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_toggle_ban', user_id=u.id) }}" style="display:inline;">
+                        <button class="btn btn-sm {% if u.is_banned %}btn-outline-success{% else %}btn-outline-danger{% endif %}" {% if u.is_admin %}disabled{% endif %}>
+                            {% if u.is_banned %}فك{% else %}حظر{% endif %}
+                        </button>
+                    </form>
+                    {% if not u.is_admin %}
+                    <form method="POST" action="{{ url_for('admin_toggle_admin', user_id=u.id) }}" style="display:inline;">
+                        <button class="btn btn-sm btn-outline-primary">{% if u.is_admin %}سحب{% else %}رفع{% endif %} أدمن</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline;" onsubmit="return confirm('حذف المستخدم نهائياً؟')">
+                        <button class="btn btn-sm btn-outline-danger">حذف</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

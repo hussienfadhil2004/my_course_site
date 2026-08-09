@@ -1,72 +1,102 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}دورة الحاسوب{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>{% block title %}منصة التعلم{% endblock %}</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- دعم PWA -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#0d6efd">
+    {% block head %}{% endblock %}
 </head>
-<body class="light-mode">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">💻 دورة الحاسوب</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+<body>
+    <!-- شريط التنقل -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">
+                <i class="fas fa-graduation-cap me-2"></i> منصة التعلم
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="collapse navbar-collapse" id="mainNavbar">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item"><a class="nav-link" href="/">الرئيسية</a></li>
                     {% if current_user.is_authenticated %}
-                    <li class="nav-item"><a class="nav-link" href="/lessons">الدروس</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/tests">اختبارات</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/statistics">إحصائياتي</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/chat">المحادثة</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/students">الطلاب</a></li>
-                    {% if current_user.role == 'admin' %}
-                    <li class="nav-item"><a class="nav-link" href="/admin">لوحة التحكم</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> الرئيسية</a></li>
+                    <!-- تم تغيير الرابط من lessons_list إلى categories_list -->
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('categories_list') }}"><i class="fas fa-book"></i> الدروس</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('tests_home') }}"><i class="fas fa-puzzle-piece"></i> الاختبارات</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('leaderboard') }}"><i class="fas fa-users"></i> الطلاب</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('statistics') }}"><i class="fas fa-chart-line"></i> إحصائياتي</a></li>
+                    {% if current_user.is_admin %}
+                    <li class="nav-item"><a class="nav-link text-warning" href="{{ url_for('admin_dashboard') }}"><i class="fas fa-crown"></i> لوحة التحكم</a></li>
                     {% endif %}
                     {% endif %}
                 </ul>
-                <div class="d-flex align-items-center">
-                    <button id="darkModeToggle" class="btn btn-outline-light me-2">🌓</button>
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
                     {% if current_user.is_authenticated %}
-                    <div class="dropdown">
-                        <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
-                            <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic) }}" class="rounded-circle me-1" width="30" height="30">
-                            {{ current_user.full_name }}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" data-bs-toggle="dropdown">
+                            <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic) }}" 
+                                 alt="{{ current_user.full_name }}" 
+                                 style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid white;margin-left:8px;">
+                            <span>{{ current_user.full_name.split()[0] }}</span>
                         </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/profile">ملفي الشخصي</a></li>
-                            <li><a class="dropdown-item" href="/logout">تسجيل الخروج</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="fas fa-user me-2"></i> الملف الشخصي</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('statistics') }}"><i class="fas fa-chart-line me-2"></i> إحصائياتي</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i> تسجيل الخروج</a></li>
                         </ul>
-                    </div>
+                    </li>
+                    <li class="nav-item ms-2">
+                        <button class="btn btn-outline-light btn-sm" id="darkModeToggle">
+                            <i class="fas fa-moon"></i>
+                        </button>
+                    </li>
                     {% else %}
-                    <a href="/login" class="btn btn-outline-light me-2">دخول</a>
-                    <a href="/register" class="btn btn-light">تسجيل</a>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">تسجيل الدخول</a></li>
+                    <li class="nav-item"><a class="nav-link btn btn-light text-primary px-3 mx-2" href="{{ url_for('register') }}">إنشاء حساب</a></li>
                     {% endif %}
-                </div>
+                </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}</div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-        {% block content %}{% endblock %}
-    </div>
+    <!-- محتوى الصفحة -->
+    <main class="py-4">
+        <div class="container">
+            <!-- عرض رسائل الفلاش -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            {% block content %}{% endblock %}
+        </div>
+    </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- تذييل -->
+    <footer class="bg-dark text-white-50 py-3 mt-5 border-top">
+        <div class="container text-center">
+            <small>&copy; 2026 منصة التعلم. جميع الحقوق محفوظة.</small>
+        </div>
+    </footer>
+
+    <!-- سكريبتات -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/pwa.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

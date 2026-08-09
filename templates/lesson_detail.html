@@ -1,19 +1,183 @@
 {% extends "base.html" %}
+
+{% block title %}{{ lesson.title }}{% endblock %}
+
 {% block content %}
-<h2>{{ lesson.title }}</h2>
-<hr>
-<div style="white-space: pre-wrap; line-height: 2; font-size: 1.1rem;">{{ lesson.content }}</div>
-<div class="mt-4 d-flex justify-content-between">
-    {% if prev %}
-    <a href="/lesson/{{ prev.id }}" class="btn btn-outline-primary">← الدرس السابق: {{ prev.title }}</a>
-    {% else %}
-    <span></span>
-    {% endif %}
-    {% if next %}
-    <a href="/lesson/{{ next.id }}" class="btn btn-primary">الدرس التالي: {{ next.title }} →</a>
-    {% else %}
-    <a href="/test" class="btn btn-success">✅ إنهاء الدورة - ابدأ الاختبار</a>
-    {% endif %}
+<div class="row">
+    <!-- العمود الرئيسي -->
+    <div class="col-lg-8">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">الرئيسية</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('lessons_list') }}">الدروس</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ lesson.title }}</li>
+            </ol>
+        </nav>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h2 class="fw-bold mb-3">{{ lesson.title }}</h2>
+                
+                <!-- شريط التقدم والحالة -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="badge bg-{{ 'success' if is_completed else 'warning' }} p-2">
+                        {% if is_completed %}
+                        <i class="fas fa-check-circle me-1"></i> مكتمل
+                        {% else %}
+                        <i class="fas fa-clock me-1"></i> لم يكتمل بعد
+                        {% endif %}
+                    </span>
+                    <span class="text-muted small"><i class="fas fa-list-ol me-1"></i> الدرس رقم {{ lesson.order }}</span>
+                </div>
+
+                <!-- فيديو يوتيوب -->
+                {% if lesson.youtube_url %}
+                <div class="ratio ratio-16x9 mb-4 shadow-sm rounded overflow-hidden">
+                    <iframe src="{{ lesson.youtube_url }}" 
+                            title="{{ lesson.title }}" 
+                            allowfullscreen 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
+                    </iframe>
+                </div>
+                {% else %}
+                <div class="bg-light p-5 text-center rounded-3 mb-4">
+                    <i class="fas fa-video-slash fa-3x text-muted mb-2"></i>
+                    <p class="text-muted">لم يتم إضافة فيديو لهذا الدرس بعد.</p>
+                </div>
+                {% endif %}
+
+                <!-- ====== المحتوى النصي الجديد ====== -->
+                {% if lesson.content %}
+                <div class="lesson-content mb-4 p-4 bg-light rounded-3 border-start border-4 border-primary">
+                    {{ lesson.content|safe }}
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    لا يوجد محتوى نصي لهذا الدرس حالياً.
+                </div>
+                {% endif %}
+
+                <!-- الأسئلة المرتبطة -->
+                {% if questions %}
+                <div class="mb-4">
+                    <h5 class="fw-bold"><i class="fas fa-question-circle me-2 text-warning"></i>أسئلة الدرس ({{ questions|length }})</h5>
+                    <div class="list-group">
+                        {% for q in questions %}
+                        <div class="list-group-item">
+                            <div class="d-flex">
+                                <span class="badge bg-info me-2">{{ loop.index }}</span>
+                                <div>
+                                    <p class="mb-1">{{ q.question_text }}</p>
+                                    <small class="text-muted">
+                                        {% if q.type == 'MCQ' %}اختيار من متعدد{% else %}صح/خطأ{% endif %} 
+                                        - <span class="badge bg-secondary">{{ q.difficulty }}</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <p class="text-muted small mt-2">
+                        <i class="fas fa-info-circle me-1"></i> 
+                        ستظهر هذه الأسئلة في اختبارات "حسب الموضوع".
+                    </p>
+                </div>
+                {% endif %}
+
+                <!-- أزرار التنقل والإكمال -->
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <div>
+                        {% if prev_lesson %}
+                        <a href="{{ url_for('lesson_detail', lesson_id=prev_lesson.id) }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-chevron-right me-1"></i> السابق
+                        </a>
+                        {% endif %}
+                        {% if next_lesson %}
+                        <a href="{{ url_for('lesson_detail', lesson_id=next_lesson.id) }}" class="btn btn-outline-primary">
+                            التالي <i class="fas fa-chevron-left me-1"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <form method="POST" action="{{ url_for('complete_lesson', lesson_id=lesson.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-{{ 'success' if not is_completed else 'secondary' }}" 
+                                    {% if is_completed %}disabled{% endif %}>
+                                <i class="fas fa-check-circle me-1"></i>
+                                {% if is_completed %}مكتمل ✓{% else %}تحديد كـ مكتمل{% endif %}
+                            </button>
+                        </form>
+                        <a href="{{ url_for('lessons_list') }}" class="btn btn-light">
+                            <i class="fas fa-arrow-right me-1"></i> العودة للقائمة
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- العمود الجانبي: ملخص سريع -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5 class="fw-bold"><i class="fas fa-info-circle me-2 text-info"></i>ملخص الدرس</h5>
+                <ul class="list-unstyled">
+                    <li class="mb-2"><i class="fas fa-hashtag me-2 text-muted"></i> الترتيب: <strong>{{ lesson.order }}</strong></li>
+                    <li class="mb-2"><i class="fas fa-question me-2 text-muted"></i> عدد الأسئلة: <strong>{{ questions|length }}</strong></li>
+                    <li class="mb-2"><i class="fas fa-check-circle me-2 text-{{ 'success' if is_completed else 'secondary' }}"></i> الحالة: <strong>{{ 'مكتمل' if is_completed else 'غير مكتمل' }}</strong></li>
+                    <li class="mb-2"><i class="fas fa-star me-2 text-warning"></i> نقاط الإكمال: <strong>+50 XP</strong></li>
+                    {% if lesson.content %}
+                    <li class="mb-2"><i class="fas fa-file-alt me-2 text-primary"></i> يوجد محتوى نصي</li>
+                    {% endif %}
+                </ul>
+                <hr>
+                <div class="d-grid">
+                    {% if not is_completed %}
+                    <form method="POST" action="{{ url_for('complete_lesson', lesson_id=lesson.id) }}">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-check-double me-1"></i> إنهاء الدرس
+                        </button>
+                    </form>
+                    {% else %}
+                    <button class="btn btn-outline-success w-100" disabled>
+                        <i class="fas fa-medal me-1"></i> تم الإكمال 🎉
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-<a href="/lessons" class="btn btn-secondary mt-3">العودة للدروس</a>
+
+<!-- تنسيق المحتوى النصي -->
+<style>
+.lesson-content {
+    font-size: 1.05rem;
+    line-height: 1.8;
+}
+.lesson-content h3 {
+    color: #0d6efd;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: bold;
+}
+.lesson-content h4 {
+    color: #495057;
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.lesson-content ul {
+    padding-right: 1.5rem;
+}
+.lesson-content li {
+    margin-bottom: 0.3rem;
+}
+.lesson-content p {
+    margin-bottom: 1rem;
+}
+.lesson-content strong {
+    color: #0d6efd;
+}
+</style>
 {% endblock %}

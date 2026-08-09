@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}جميع التصنيفات{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold"><i class="fas fa-th-large me-2 text-primary"></i>تصنيفات الدروس</h2>
+    <span class="badge bg-secondary p-2">{{ categories|length }} تصنيف</span>
+</div>
+
+<div class="row g-4">
+    {% for category in categories %}
+    <div class="col-md-6 col-lg-4">
+        <a href="{{ url_for('category_lessons', category_id=category.id) }}" class="text-decoration-none text-dark">
+            <div class="card h-100 shadow-sm border-0 hover-lift">
+                <div class="card-body text-center p-4">
+                    <div class="display-1 text-primary mb-3">
+                        <i class="fas {{ category.icon or 'fa-folder' }}"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">{{ category.name }}</h5>
+                    <p class="card-text text-muted small">{{ category.description or 'لا يوجد وصف' }}</p>
+                    <span class="badge bg-primary">
+                        <i class="fas fa-book me-1"></i> {{ category.lessons|selectattr('is_published')|list|length }} دروس
+                    </span>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% else %}
+    <div class="col-12 text-center py-5">
+        <i class="fas fa-folder-open fa-4x text-muted mb-3"></i>
+        <h4>لا توجد تصنيفات حالياً</h4>
+        <p class="text-muted">سيتم إضافة التصنيفات قريباً</p>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.15) !important;
+}
+</style>
+{% endblock %}

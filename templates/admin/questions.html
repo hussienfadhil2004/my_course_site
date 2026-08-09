@@ -1,0 +1,45 @@
+{% extends "admin/admin_base.html" %}
+
+{% block admin_content %}
+<h4 class="fw-bold mb-4"><i class="fas fa-question-circle me-2 text-primary"></i>إدارة الأسئلة</h4>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5>إضافة سؤال جديد</h5>
+        <form method="POST">
+            <div class="row g-2">
+                <div class="col-md-3"><select class="form-select" name="lesson_id" required><option value="">الدرس</option>{% for l in lessons %}<option value="{{ l.id }}">{{ l.title }}</option>{% endfor %}</select></div>
+                <div class="col-md-2"><select class="form-select" name="type"><option value="MCQ">اختيار من متعدد</option><option value="TRUE_FALSE">صح/خطأ</option></select></div>
+                <div class="col-md-4"><input class="form-control" name="question_text" placeholder="نص السؤال" required></div>
+                <div class="col-md-3"><input class="form-control" name="correct_answer" placeholder="الإجابة الصحيحة" required></div>
+                <div class="col-md-2"><input class="form-control" name="option_a" placeholder="خيار أ"></div>
+                <div class="col-md-2"><input class="form-control" name="option_b" placeholder="خيار ب"></div>
+                <div class="col-md-2"><input class="form-control" name="option_c" placeholder="خيار ج"></div>
+                <div class="col-md-2"><input class="form-control" name="option_d" placeholder="خيار د"></div>
+                <div class="col-md-2"><select class="form-select" name="difficulty"><option value="easy">سهل</option><option value="medium" selected>متوسط</option><option value="hard">صعب</option></select></div>
+                <div class="col-md-2"><button class="btn btn-success w-100">إضافة</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead><tr><th>#</th><th>الدرس</th><th>السؤال</th><th>النوع</th><th>الإجابة</th><th>الإجراء</th></tr></thead>
+        <tbody>
+            {% for q in questions %}
+            <tr>
+                <td>{{ q.id }}</td>
+                <td>{{ q.lesson.title if q.lesson else '-' }}</td>
+                <td>{{ q.question_text[:40] }}</td>
+                <td>{{ q.type }}</td>
+                <td>{{ q.correct_answer }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_delete_question', question_id=q.id) }}" onsubmit="return confirm('حذف السؤال؟')">
+                        <button class="btn btn-sm btn-danger">حذف</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

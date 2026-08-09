@@ -1,20 +1,63 @@
 {% extends "base.html" %}
+
+{% block title %}لوحة التحكم - {{ super() }}{% endblock %}
+
 {% block content %}
 <div class="row">
-    <div class="col-md-3">
-        <ul class="list-group">
-            <li class="list-group-item"><a href="/admin">الرئيسية</a></li>
-            <li class="list-group-item"><a href="/admin/users">المستخدمين</a></li>
-            <li class="list-group-item"><a href="/admin/recovery-requests">طلبات الاستعادة</a></li>
-            <li class="list-group-item"><a href="/admin/lessons">إدارة الدروس</a></li>
-            <li class="list-group-item"><a href="/admin/questions">إدارة الأسئلة</a></li>
-            <li class="list-group-item"><a href="/admin/resources">المكتبة</a></li>
-            <li class="list-group-item"><a href="/admin/notifications">إشعارات جماعية</a></li>
-            <li class="list-group-item"><a href="/admin/audit-log">سجل التدقيق</a></li>
-        </ul>
+    <!-- الشريط الجانبي -->
+    <div class="col-lg-2 d-none d-lg-block">
+        <div class="list-group list-group-flush sticky-top pt-3">
+            <a href="{{ url_for('admin_dashboard') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+                <i class="fas fa-chart-pie me-2"></i> الإحصائيات
+            </a>
+            <a href="{{ url_for('admin_users') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_users' %}active{% endif %}">
+                <i class="fas fa-users me-2"></i> المستخدمين
+            </a>
+            <a href="{{ url_for('admin_lessons') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_lessons' %}active{% endif %}">
+                <i class="fas fa-book me-2"></i> الدروس
+            </a>
+            <a href="{{ url_for('admin_questions') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_questions' %}active{% endif %}">
+                <i class="fas fa-question-circle me-2"></i> الأسئلة
+            </a>
+            <a href="{{ url_for('admin_announcements') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_announcements' %}active{% endif %}">
+                <i class="fas fa-bullhorn me-2"></i> الإعلانات
+            </a>
+            <a href="{{ url_for('admin_audit_log') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_audit_log' %}active{% endif %}">
+                <i class="fas fa-clipboard-list me-2"></i> سجل التدقيق
+            </a>
+            <a href="{{ url_for('admin_recovery_requests') }}" class="list-group-item list-group-item-action {% if request.endpoint == 'admin_recovery_requests' %}active{% endif %}">
+                <i class="fas fa-key me-2"></i> طلبات الاستعادة
+            </a>
+            <a href="#" class="list-group-item list-group-item-action text-danger" data-bs-toggle="modal" data-bs-target="#resetDbModal">
+                <i class="fas fa-database me-2"></i> إعادة تعيين DB
+            </a>
+        </div>
     </div>
-    <div class="col-md-9">
+    <!-- المحتوى -->
+    <div class="col-lg-10">
         {% block admin_content %}{% endblock %}
+    </div>
+</div>
+
+<!-- مودال تأكيد إعادة تعيين قاعدة البيانات -->
+<div class="modal fade" id="resetDbModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>تأكيد خطير</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>سيؤدي هذا إلى <strong>حذف جميع البيانات</strong> (المستخدمين، الدروس، الأسئلة، المحاولات، السجلات) وإعادة إنشائها بالبيانات الافتراضية فقط.</p>
+                <p class="text-danger fw-bold">هذا الإجراء لا يمكن التراجع عنه!</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form method="POST" action="{{ url_for('admin_reset_db') }}">
+                    <button type="submit" class="btn btn-danger">نعم، أعد التعيين</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
