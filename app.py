@@ -14,11 +14,12 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
+from sqlalchemy import inspect
 import io
-import sqlalchemy as sa
 
 load_dotenv()
 
+# ==================== الإعدادات الأساسية ====================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-please-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///mycourse.db')
@@ -35,6 +36,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('static/css', exist_ok=True)
 os.makedirs('static/js', exist_ok=True)
 
+# ==================== قاعدة البيانات ====================
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 login_manager = LoginManager(app)
@@ -42,6 +44,7 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'يرجى تسجيل الدخول أولاً.'
 login_manager.login_message_category = 'warning'
 
+# ==================== ديكور صلاحيات المسؤول ====================
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -49,6 +52,58 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
+
+# ==================== دالة ترقية قاعدة البيانات ====================
+def upgrade_database():
+    """التحقق من وجود الأعمدة والجداول المطلوبة وإضافتها إذا لم تكن موجودة"""
+    with app.app_context():
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        
+        # 1. التحقق من جدول lesson_progress وإضافة is_completed
+        if 'lesson_progress' in tables:
+            columns = [c['name'] for c in inspector.get_columns('lesson_progress')]
+            if 'is_completed' not in columns:
+                print("⚠️ جاري إضافة عمود is_completed إلى lesson_progress...")
+                try:
+                    if 'postgres' in db.engine.url.drivername:
+                        db.session.execute('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT FALSE;')
+                    else:
+                        db.session.execute('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT 0;')
+                    db.session.commit()
+                    print("✅ تم إضافة العمود is_completed.")
+                except Exception as e:
+                    print(f"⚠️ فشل إضافة العمود is_completed: {e}")
+            else:
+                print("✅ العمود is_completed موجود مسبقاً.")
+        else:
+            print("⚠️ جدول lesson_progress غير موجود، سيتم إنشاؤه لاحقاً.")
+
+        # 2. التحقق من جدول categories
+        if 'categories' not in tables:
+            print("⚠️ جاري إنشاء جدول categories...")
+            db.create_all()  # ينشئ الجداول المفقودة
+            print("✅ تم إنشاء الجداول المفقودة.")
+
+        # 3. التحقق من عمود category_id في جدول lessons
+        if 'lessons' in tables:
+            columns = [c['name'] for c in inspector.get_columns('lessons')]
+            if 'category_id' not in columns:
+                print("⚠️ جاري إضافة عمود category_id إلى lessons...")
+                try:
+                    # التأكد من وجود جدول categories قبل إضافة المفتاح الخارجي
+                    if 'categories' not in tables:
+                        db.create_all()  # ينشئ categories إذا لم يكن موجوداً
+                    if 'postgres' in db.engine.url.drivername:
+                        db.session.execute('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id);')
+                    else:
+                        db.session.execute('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id);')
+                    db.session.commit()
+                    print("✅ تم إضافة العمود category_id.")
+                except Exception as e:
+                    print(f"⚠️ فشل إضافة العمود category_id: {e}")
+            else:
+                print("✅ العمود category_id موجود مسبقاً.")
 
 # ==================== نماذج قاعدة البيانات ====================
 class User(UserMixin, db.Model):
@@ -199,10 +254,12 @@ class ActivityLog(db.Model):
     ip_address = db.Column(db.String(45), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+# ==================== تسجيل مدير الدخول ====================
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ==================== دوال مساعدة ====================
 def generate_student_id():
     last_user = User.query.order_by(User.id.desc()).first()
     if last_user and last_user.student_id and last_user.student_id.startswith('STU'):
@@ -218,7 +275,7 @@ def log_activity(user_id, action, ip=None):
     db.session.add(log)
     db.session.commit()
 
-# ==================== المسارات (كما هي، بدون تغيير) ====================
+# ==================== مسارات المصادقة والملف الشخصي ====================
 @app.route('/', methods=['GET'])
 def index():
     if current_user.is_authenticated:
@@ -334,15 +391,11 @@ def profile():
         return redirect(url_for('profile'))
     return render_template('profile.html', user=current_user)
 
+# ==================== المسارات العامة ====================
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    try:
-        lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
-    except Exception:
-        # إذا حدث خطأ (مثل عدم وجود عمود)، نعيد تعيين قاعدة البيانات تلقائياً (لكننا سنفعل ذلك عند بدء التشغيل)
-        flash('حدث خطأ في قاعدة البيانات. جارٍ إعادة تهيئة النظام...', 'warning')
-        return redirect(url_for('admin_reset_db'))
+    lessons = Lesson.query.filter_by(is_published=True).order_by(Lesson.order).all()
     completed_count = LessonProgress.query.filter_by(user_id=current_user.id, is_completed=True).count()
     total_lessons = Lesson.query.filter_by(is_published=True).count()
     recent_attempts = QuizAttempt.query.filter_by(user_id=current_user.id).order_by(QuizAttempt.completed_at.desc()).limit(5).all()
@@ -377,8 +430,16 @@ def lesson_detail(lesson_id):
     if not lesson.is_published:
         flash('الدرس غير منشور.', 'warning')
         return redirect(url_for('categories_list'))
-    prev_lesson = Lesson.query.filter(Lesson.category_id == lesson.category_id, Lesson.order < lesson.order, Lesson.is_published == True).order_by(Lesson.order.desc()).first()
-    next_lesson = Lesson.query.filter(Lesson.category_id == lesson.category_id, Lesson.order > lesson.order, Lesson.is_published == True).order_by(Lesson.order.asc()).first()
+    prev_lesson = Lesson.query.filter(
+        Lesson.category_id == lesson.category_id,
+        Lesson.order < lesson.order,
+        Lesson.is_published == True
+    ).order_by(Lesson.order.desc()).first()
+    next_lesson = Lesson.query.filter(
+        Lesson.category_id == lesson.category_id,
+        Lesson.order > lesson.order,
+        Lesson.is_published == True
+    ).order_by(Lesson.order.asc()).first()
     progress = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=lesson.id).first()
     is_completed = progress.is_completed if progress else False
     questions = Question.query.filter_by(lesson_id=lesson.id).all()
@@ -552,6 +613,10 @@ def test_result(attempt_id):
             questions_data.append({'question': q, 'selected': ua.selected_answer, 'is_correct': ua.is_correct, 'correct': q.correct_answer})
     return render_template('test_result.html', attempt=attempt, questions_data=questions_data)
 
+# ========================================================
+# ================ الميزات الجديدة =======================
+# ========================================================
+
 @app.route('/statistics')
 @login_required
 def statistics():
@@ -657,7 +722,10 @@ def generate_certificate():
     pdf_output.seek(0)
     return send_file(pdf_output, as_attachment=True, download_name=f'شهادة_{current_user.student_id}.pdf', mimetype='application/pdf')
 
-# ==================== لوحة تحكم المسؤول ====================
+# ========================================================
+# =================== لوحة تحكم المسؤول ===================
+# ========================================================
+
 @app.route('/admin')
 @login_required
 @admin_required
@@ -960,16 +1028,16 @@ def admin_reset_db():
          'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
          'youtube': 'https://www.youtube.com/embed/HB4I2C2n7qg?si=ixHZkDQKR0uw5Q7V', 'order': 1},
         {'category': 'برامج النظام', 'title': 'برنامج الدفتر (Notepad)', 'description': 'تعلم استخدام برنامج الدفتر لكتابة النصوص',
-         'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق. يستخدم لكتابة الملاحظات السريعة والأكواد البرمجية.</p>',
+         'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق.</p>',
          'youtube': 'https://www.youtube.com/embed/abc123', 'order': 1},
         {'category': 'برامج النظام', 'title': 'برنامج الرسام (Paint)', 'description': 'تعلم استخدام برنامج الرسام للرسم والتصميم',
-         'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي. يمكنك من رسم أشكال وتحرير الصور.</p>',
+         'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي.</p>',
          'youtube': 'https://www.youtube.com/embed/def456', 'order': 2},
         {'category': 'برامج النظام', 'title': 'برنامج الملاحظات (Sticky Notes)', 'description': 'تعلم استخدام الملاحظات اللاصقة الرقمية',
-         'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة وتثبيتها على سطح المكتب.</p>',
+         'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة.</p>',
          'youtube': 'https://www.youtube.com/embed/ghi789', 'order': 3},
         {'category': 'برامج النظام', 'title': 'مسجل الصوت (Sound Recorder)', 'description': 'تعلم استخدام مسجل الصوت لتسجيل الأصوات',
-         'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون أو مصادر الصوت الأخرى.</p>',
+         'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون.</p>',
          'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
     ]
     
@@ -1030,51 +1098,13 @@ def admin_reset_db():
     flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
     return redirect(url_for('admin_dashboard'))
 
-# ==================== دالة الترحيل التلقائي ====================
-def upgrade_database():
-    """تحديث قاعدة البيانات بإضافة الأعمدة المفقودة دون فقدان البيانات"""
-    with app.app_context():
-        inspector = sa.inspect(db.engine)
-        
-        # التحقق من وجود جدول lesson_progress
-        if 'lesson_progress' in inspector.get_table_names():
-            columns = [col['name'] for col in inspector.get_columns('lesson_progress')]
-            if 'is_completed' not in columns:
-                # إضافة العمود is_completed
-                with db.engine.connect() as conn:
-                    conn.execute(sa.text('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT FALSE'))
-                    conn.commit()
-                print("✅ تم إضافة عمود is_completed إلى جدول lesson_progress")
-        
-        # التحقق من وجود جدول lessons
-        if 'lessons' in inspector.get_table_names():
-            columns = [col['name'] for col in inspector.get_columns('lessons')]
-            if 'category_id' not in columns:
-                # إضافة عمود category_id
-                with db.engine.connect() as conn:
-                    conn.execute(sa.text('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id)'))
-                    conn.commit()
-                print("✅ تم إضافة عمود category_id إلى جدول lessons")
-        
-        # التحقق من وجود جدول categories
-        if 'categories' not in inspector.get_table_names():
-            # إنشاء جدول categories
-            db.create_all()
-            print("✅ تم إنشاء جدول categories")
-
 # ==================== نقطة التشغيل ====================
 if __name__ == '__main__':
     with app.app_context():
-        # محاولة الترحيل التلقائي
-        try:
-            upgrade_database()
-        except Exception as e:
-            print(f"⚠️ خطأ في الترحيل التلقائي: {e}")
-            print("🔄 جارٍ إنشاء الجداول من الصفر...")
-            db.drop_all()
-            db.create_all()
+        db.create_all()
+        upgrade_database()  # ترقية الجداول والأعمدة المفقودة
         
-        # إنشاء المسؤول إذا لم يكن موجوداً
+        # إنشاء المسؤول إذا لم يوجد
         if not User.query.filter_by(email='admin@mycourse.com').first():
             admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
             admin.set_password('admin123')
@@ -1082,28 +1112,32 @@ if __name__ == '__main__':
             db.session.commit()
             print("✅ Admin: admin@mycourse.com / admin123")
         
-        # إذا لم توجد تصنيفات، أنشئ البيانات الافتراضية
+        # إنشاء تصنيفات افتراضية إذا لم توجد
         if Category.query.count() == 0:
-            print("🌱 إنشاء البيانات الافتراضية (تصنيفات ودروس)...")
-            # يمكننا استدعاء دالة reset_db لكنها تحتاج إلى طلب POST
-            # لذا سننشئ بيانات افتراضية بسيطة هنا
+            print("⚠️ لا توجد تصنيفات. جاري إنشاء تصنيفات افتراضية...")
             categories = [
-                Category(name='برامج النظام', description='تعلم استخدام برامج الكمبيوتر الأساسية', icon='fa-desktop', order=1),
-                Category(name='أساسيات البرمجة', description='تعلم أساسيات البرمجة', icon='fa-code', order=2),
+                Category(name='أساسيات البرمجة', description='تعلم أساسيات البرمجة', icon='fa-code', order=1),
+                Category(name='قواعد البيانات', description='تعلم قواعد البيانات', icon='fa-database', order=2),
+                Category(name='برامج النظام', description='برامج الكمبيوتر الأساسية', icon='fa-desktop', order=3),
+                Category(name='شبكات الحاسوب', description='أساسيات الشبكات', icon='fa-network-wired', order=4),
             ]
             db.session.add_all(categories)
             db.session.commit()
+            print("✅ تم إنشاء تصنيفات افتراضية.")
             
-            # إضافة بعض الدروس البسيطة
-            cat_system = Category.query.filter_by(name='برامج النظام').first()
-            if cat_system:
-                lessons = [
-                    Lesson(category_id=cat_system.id, title='برنامج الدفتر (Notepad)', description='تعلم استخدام الدفتر', order=1, is_published=True),
-                    Lesson(category_id=cat_system.id, title='برنامج الرسام (Paint)', description='تعلم استخدام الرسام', order=2, is_published=True),
-                ]
-                db.session.add_all(lessons)
-                db.session.commit()
-            print("✅ تم إنشاء بيانات افتراضية.")
+            # إنشاء دروس افتراضية لبرامج النظام إذا لم توجد دروس
+            if Lesson.query.count() == 0:
+                cat = Category.query.filter_by(name='برامج النظام').first()
+                if cat:
+                    lessons = [
+                        Lesson(category_id=cat.id, title='برنامج الدفتر (Notepad)', description='تعلم استخدام الدفتر', order=1, is_published=True),
+                        Lesson(category_id=cat.id, title='برنامج الرسام (Paint)', description='تعلم استخدام الرسام', order=2, is_published=True),
+                        Lesson(category_id=cat.id, title='برنامج الملاحظات (Sticky Notes)', description='تعلم استخدام الملاحظات', order=3, is_published=True),
+                        Lesson(category_id=cat.id, title='مسجل الصوت (Sound Recorder)', description='تعلم استخدام مسجل الصوت', order=4, is_published=True),
+                    ]
+                    db.session.add_all(lessons)
+                    db.session.commit()
+                    print("✅ تم إنشاء دروس افتراضية لبرامج النظام.")
     
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)  # debug=False على Railway
+    app.run(host='0.0.0.0', port=port, debug=False)
