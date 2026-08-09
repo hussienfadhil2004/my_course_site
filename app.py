@@ -281,9 +281,110 @@ def log_activity(user_id, action, ip=None):
         db.session.add(log)
         db.session.commit()
     except Exception as e:
-        # إذا فشل تسجيل النشاط، لا نريد أن نوقف العملية الأساسية
         print(f"⚠️ فشل تسجيل النشاط: {e}")
         db.session.rollback()
+
+# ==================== دالة إضافة الأسئلة الافتراضية ====================
+def add_default_questions():
+    """إضافة الأسئلة المحددة مسبقاً لكل درس إذا لم تكن موجودة"""
+    # تعريف الأسئلة
+    questions_data = [
+        # الدرس الأول: السلامة المهنية للحاسوب
+        {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'من قواعد السلامة المهنية، يجب أن تكون عيناك في مستوى الجزء العلوي من الشاشة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'MCQ', 'question_text': 'ما هي قاعدة 20-20-20 التي تحمي العينين؟', 'option_a': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'option_b': 'كل 20 ساعة، انظر إلى شيء يبعد 20 متراً لمدة 20 دقيقة', 'option_c': 'كل 20 دقيقة، أغمض عينيك لمدة 20 ثانية', 'option_d': 'كل 20 دقيقة، اشرب 20 مل من الماء', 'correct_answer': 'كل 20 دقيقة، انظر إلى شيء يبعد 20 قدماً لمدة 20 ثانية', 'difficulty': 'easy'},
+        {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'لا بأس بوضع المشروبات بجانب الحاسوب طالما أن الكوب مغلق جيداً.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+        {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد سلوكاً صحيحاً للحفاظ على السلامة الكهربائية؟', 'option_a': 'سحب السلك من الوسط لفصل الجهاز', 'option_b': 'استخدام واقي صدمات (مشترك كهربائي مزود بفيوز)', 'option_c': 'تغطية فتحات التهوية لمنع دخول الغبار', 'option_d': 'استخدام أي مشترك كهربائي بغض النظر عن جودته', 'correct_answer': 'استخدام واقي صدمات (مشترك كهربائي مزود بفيوز)', 'difficulty': 'easy'},
+        {'lesson_title': 'السلامة المهنية للحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'يجب مشاركة كلمة مرور جهازك مع زملائك لتسهيل العمل.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+
+        # الدرس الثاني: تعريف الحاسوب
+        {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'ما هو تعريف الحاسوب؟', 'option_a': 'جهاز إلكتروني يستقبل البيانات ويعالجها ويخرج النتائج', 'option_b': 'جهاز ميكانيكي للطباعة', 'option_c': 'برنامج لإدارة الملفات', 'option_d': 'جهاز لتشغيل الفيديوهات فقط', 'correct_answer': 'جهاز إلكتروني يستقبل البيانات ويعالجها ويخرج النتائج', 'difficulty': 'easy'},
+        {'lesson_title': 'تعريف الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'الذاكرة العشوائية (RAM) تحتفظ بالبيانات حتى بعد إيقاف تشغيل الحاسوب.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+        {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد من أجهزة الإخراج؟', 'option_a': 'لوحة المفاتيح', 'option_b': 'الفأرة', 'option_c': 'الشاشة', 'option_d': 'الميكروفون', 'correct_answer': 'الشاشة', 'difficulty': 'easy'},
+        {'lesson_title': 'تعريف الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'نظام التشغيل (مثل ويندوز) يُصنف ضمن برمجيات التطبيقات.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+        {'lesson_title': 'تعريف الحاسوب', 'type': 'MCQ', 'question_text': 'ما هي المكونات الثلاثة الأساسية لعمل الحاسوب؟', 'option_a': 'الإدخال، المعالجة، الإخراج', 'option_b': 'الشاشة، الفأرة، الطابعة', 'option_c': 'البرامج، الألعاب، الإنترنت', 'option_d': 'المعالج، الذاكرة، القرص الصلب', 'correct_answer': 'الإدخال، المعالجة، الإخراج', 'difficulty': 'easy'},
+
+        # الدرس الثالث: مكونات الحاسوب
+        {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعتبر "عقل" الحاسوب؟', 'option_a': 'اللوحة الأم', 'option_b': 'وحدة المعالجة المركزية (المعالج)', 'option_c': 'الذاكرة العشوائية', 'option_d': 'القرص الصلب', 'correct_answer': 'وحدة المعالجة المركزية (المعالج)', 'difficulty': 'easy'},
+        {'lesson_title': 'مكونات الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'الـ SSD أسرع من الـ HDD في تخزين البيانات.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد جهاز إدخال؟', 'option_a': 'الشاشة', 'option_b': 'الطابعة', 'option_c': 'الفأرة', 'option_d': 'السماعات', 'correct_answer': 'الفأرة', 'difficulty': 'easy'},
+        {'lesson_title': 'مكونات الحاسوب', 'type': 'TRUE_FALSE', 'question_text': 'اللوحة الأم هي المسؤولة عن توصيل جميع مكونات الحاسوب ببعضها البعض.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'مكونات الحاسوب', 'type': 'MCQ', 'question_text': 'ما هي وظيفة بطاقة الرسوميات (GPU)؟', 'option_a': 'معالجة وعرض الصور والفيديوهات', 'option_b': 'تخزين الملفات', 'option_c': 'إدارة الاتصال بالإنترنت', 'option_d': 'تشغيل نظام التشغيل', 'correct_answer': 'معالجة وعرض الصور والفيديوهات', 'difficulty': 'easy'},
+
+        # الدرس الرابع: استخدام الماوس ولوحة المفاتيح
+        {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو اختصار "نسخ" في لوحة المفاتيح؟', 'option_a': 'Ctrl + C', 'option_b': 'Ctrl + V', 'option_c': 'Ctrl + X', 'option_d': 'Ctrl + Z', 'correct_answer': 'Ctrl + C', 'difficulty': 'easy'},
+        {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'TRUE_FALSE', 'question_text': 'النقر المزدوج (Double-click) يستخدم عادة لفتح الملفات والبرامج.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو اختصار "لصق" في لوحة المفاتيح؟', 'option_a': 'Ctrl + C', 'option_b': 'Ctrl + V', 'option_c': 'Ctrl + X', 'option_d': 'Ctrl + Z', 'correct_answer': 'Ctrl + V', 'difficulty': 'easy'},
+        {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'TRUE_FALSE', 'question_text': 'مفتاح (Caps Lock) يستخدم لكتابة الحروف الكبيرة بشكل مؤقت عند الضغط عليه مع الحرف.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+        {'lesson_title': 'استخدام الماوس ولوحة المفاتيح', 'type': 'MCQ', 'question_text': 'ما هو استخدام الزر الأيمن للماوس؟', 'option_a': 'لتحديد العنصر', 'option_b': 'لفتح الملفات', 'option_c': 'لعرض القائمة المنسدلة للخيارات', 'option_d': 'لسحب العنصر', 'correct_answer': 'لعرض القائمة المنسدلة للخيارات', 'difficulty': 'easy'},
+
+        # الدرس الخامس: سطح المكتب وشريط المهام
+        {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'أين يقع زر "ابدأ" (Start) عادةً؟', 'option_a': 'في منتصف الشاشة', 'option_b': 'في أقصى يسار شريط المهام', 'option_c': 'في أقصى يمين شريط المهام', 'option_d': 'في أعلى الشاشة', 'correct_answer': 'في أقصى يسار شريط المهام', 'difficulty': 'easy'},
+        {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك تصغير النافذة إلى شريط المهام دون إغلاق البرنامج.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'ما هي سلة المحذوفات (Recycle Bin)؟', 'option_a': 'مكان تخزين الملفات المحذوفة مؤقتاً', 'option_b': 'مكان تخزين الملفات المهمة', 'option_c': 'برنامج لحذف الملفات نهائياً', 'option_d': 'مجلد لتثبيت البرامج', 'correct_answer': 'مكان تخزين الملفات المحذوفة مؤقتاً', 'difficulty': 'easy'},
+        {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك تغيير خلفية سطح المكتب (الورق الحائط) حسب رغبتك.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'سطح المكتب وشريط المهام', 'type': 'MCQ', 'question_text': 'ما هو اختصار التبديل بين البرامج المفتوحة؟', 'option_a': 'Alt + Tab', 'option_b': 'Ctrl + Tab', 'option_c': 'Alt + F4', 'option_d': 'Ctrl + Alt + Delete', 'correct_answer': 'Alt + Tab', 'difficulty': 'easy'},
+
+        # الدرس السادس: إدارة الملفات
+        {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك نقل ملف من مجلد إلى آخر باستخدام قص (Ctrl + X) ولصق (Ctrl + V).', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'إدارة الملفات', 'type': 'MCQ', 'question_text': 'ما هو اختصار إنشاء مجلد جديد؟', 'option_a': 'Ctrl + N', 'option_b': 'Ctrl + Shift + N', 'option_c': 'Alt + N', 'option_d': 'Ctrl + F', 'correct_answer': 'Ctrl + Shift + N', 'difficulty': 'easy'},
+        {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'الملفات المحذوفة تذهب إلى سلة المحذوفات ويمكن استعادتها.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'إدارة الملفات', 'type': 'MCQ', 'question_text': 'ما هو اختصار إعادة تسمية ملف أو مجلد؟', 'option_a': 'Ctrl + R', 'option_b': 'F2', 'option_c': 'Alt + R', 'option_d': 'Shift + R', 'correct_answer': 'F2', 'difficulty': 'easy'},
+        {'lesson_title': 'إدارة الملفات', 'type': 'TRUE_FALSE', 'question_text': 'يجب ترك جميع الملفات على سطح المكتب لتسهيل الوصول إليها.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+
+        # الدرس السابع: برامج النظام
+        {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لالتقاط صورة للشاشة؟', 'option_a': 'برنامج الدفتر', 'option_b': 'أداة القصاص (Snipping Tool)', 'option_c': 'برنامج الرسام', 'option_d': 'مسجل الصوت', 'correct_answer': 'أداة القصاص (Snipping Tool)', 'difficulty': 'easy'},
+        {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'TRUE_FALSE', 'question_text': 'برنامج الدفتر (Notepad) يدعم تنسيق النصوص بالألوان والخطوط المختلفة.', 'correct_answer': 'خطأ', 'difficulty': 'easy'},
+        {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لتسجيل الصوت عبر الميكروفون؟', 'option_a': 'برنامج الرسام', 'option_b': 'برنامج الملاحظات اللاصقة', 'option_c': 'مسجل الصوت (Voice Recorder)', 'option_d': 'أداة القصاص', 'correct_answer': 'مسجل الصوت (Voice Recorder)', 'difficulty': 'easy'},
+        {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'TRUE_FALSE', 'question_text': 'يمكن استخدام برنامج الملاحظات اللاصقة (Sticky Notes) لتدوين التذكيرات السريعة.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'برامج النظام (الرسام، الدفتر، مسجل الصوت، القصاص، الملاحظات)', 'type': 'MCQ', 'question_text': 'ما هو امتداد الملف الذي يحفظ به برنامج الرسام (Paint) الصورة بشكل شائع؟', 'option_a': '.txt', 'option_b': '.mp3', 'option_c': '.png أو .jpg', 'option_d': '.docx', 'correct_answer': '.png أو .jpg', 'difficulty': 'easy'},
+
+        # الدرس الثامن: تنزيل التطبيقات وتثبيتها وإزالتها
+        {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'أي من التالي يُعد مصدراً آمناً لتحميل البرامج؟', 'option_a': 'موقع مجهول من الإنترنت', 'option_b': 'الموقع الرسمي للبرنامج', 'option_c': 'رابط من بريد إلكتروني غير معروف', 'option_d': 'إعلان منبثق على الإنترنت', 'correct_answer': 'الموقع الرسمي للبرنامج', 'difficulty': 'easy'},
+        {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'TRUE_FALSE', 'question_text': 'ملفات التثبيت عادةً ما يكون امتدادها .exe أو .msi.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'كيف يمكن إزالة (حذف) برنامج من جهازك؟', 'option_a': 'حذف أيقونته من سطح المكتب', 'option_b': 'استخدام الإعدادات ← التطبيقات والميزات ← إلغاء التثبيت', 'option_c': 'حذف مجلد البرنامج من القرص الصلب', 'option_d': 'إعادة تشغيل الحاسوب', 'correct_answer': 'استخدام الإعدادات ← التطبيقات والميزات ← إلغاء التثبيت', 'difficulty': 'easy'},
+        {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'TRUE_FALSE', 'question_text': 'تطبيقات المتجر (Microsoft Store) آمنة بشكل عام لأنها تأتي من مصدر رسمي.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'تنزيل التطبيقات وتثبيتها وإزالتها', 'type': 'MCQ', 'question_text': 'ما الذي يجب عليك فعله قبل تثبيت برنامج من الإنترنت؟', 'option_a': 'فحص الملف ببرنامج الحماية', 'option_b': 'إغلاق جميع البرامج المفتوحة', 'option_c': 'تشغيل الفيديو أولاً', 'option_d': 'طباعة الملف', 'correct_answer': 'فحص الملف ببرنامج الحماية', 'difficulty': 'easy'},
+
+        # الدرس التاسع: مايكروسوفت وورد
+        {'lesson_title': 'مايكروسوفت وورد', 'type': 'MCQ', 'question_text': 'ما هو اختصار حفظ الملف في وورد؟', 'option_a': 'Ctrl + S', 'option_b': 'Ctrl + O', 'option_c': 'Ctrl + N', 'option_d': 'Ctrl + P', 'correct_answer': 'Ctrl + S', 'difficulty': 'easy'},
+        {'lesson_title': 'مايكروسوفت وورد', 'type': 'TRUE_FALSE', 'question_text': 'يمكنك إدراج صور وجداول في مستند وورد.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'مايكروسوفت وورد', 'type': 'MCQ', 'question_text': 'أي من التالي يُستخدم لتحديد النص وتظليله؟', 'option_a': 'النقر بالماوس مع السحب', 'option_b': 'الضغط على Ctrl + A', 'option_c': 'الضغط على Ctrl + C', 'option_d': 'النقر بالماوس الأيمن', 'correct_answer': 'النقر بالماوس مع السحب', 'difficulty': 'easy'},
+        {'lesson_title': 'مايكروسوفت وورد', 'type': 'TRUE_FALSE', 'question_text': 'علامة التبويب "الرئيسية" (Home) تحتوي على أدوات تنسيق النص مثل الخط والحجم واللون.', 'correct_answer': 'صحيح', 'difficulty': 'easy'},
+        {'lesson_title': 'مايكروسوفت وورد', 'type': 'MCQ', 'question_text': 'ما هو اختصار الطباعة في وورد؟', 'option_a': 'Ctrl + S', 'option_b': 'Ctrl + O', 'option_c': 'Ctrl + N', 'option_d': 'Ctrl + P', 'correct_answer': 'Ctrl + P', 'difficulty': 'easy'},
+    ]
+
+    added = 0
+    skipped = 0
+    for q_data in questions_data:
+        lesson_title = q_data.pop('lesson_title')
+        lesson = Lesson.query.filter_by(title=lesson_title).first()
+        if not lesson:
+            print(f"⚠️ الدرس '{lesson_title}' غير موجود، تخطي السؤال: {q_data['question_text'][:30]}...")
+            skipped += 1
+            continue
+        # التحقق من عدم وجود السؤال مكرراً (نفس النص ونفس الدرس)
+        existing = Question.query.filter_by(lesson_id=lesson.id, question_text=q_data['question_text']).first()
+        if existing:
+            continue
+        question = Question(
+            lesson_id=lesson.id,
+            type=q_data['type'],
+            question_text=q_data['question_text'],
+            option_a=q_data.get('option_a'),
+            option_b=q_data.get('option_b'),
+            option_c=q_data.get('option_c'),
+            option_d=q_data.get('option_d'),
+            correct_answer=q_data['correct_answer'],
+            difficulty=q_data.get('difficulty', 'easy')
+        )
+        db.session.add(question)
+        added += 1
+    if added > 0:
+        db.session.commit()
+        print(f"✅ تم إضافة {added} سؤالاً جديداً.")
+    if skipped > 0:
+        print(f"⚠️ تم تخطي {skipped} سؤالاً (الدروس غير موجودة).")
+    return added, skipped
 
 # ==================== مسارات المصادقة والملف الشخصي ====================
 @app.route('/', methods=['GET'])
@@ -958,7 +1059,7 @@ def admin_delete_lesson(lesson_id):
         flash(f'حدث خطأ أثناء حذف الدرس: {str(e)}', 'danger')
     return redirect(url_for('admin_lessons'))
 
-# ==================== إدارة الأسئلة (تم إصلاح دالة الحذف) ====================
+# ==================== إدارة الأسئلة ====================
 @app.route('/admin/questions', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -1000,30 +1101,24 @@ def admin_questions():
     lessons = Lesson.query.all()
     return render_template('admin/questions.html', questions=questions, lessons=lessons)
 
-# ========== دالة حذف السؤال (تم إصلاحها) ==========
 @app.route('/admin/question/<int:question_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def admin_delete_question(question_id):
     try:
-        # 1. البحث عن السؤال
         q = Question.query.get(question_id)
         if not q:
             flash('السؤال غير موجود.', 'danger')
             return redirect(url_for('admin_questions'))
 
-        # 2. حذف جميع الإجابات المرتبطة بهذا السؤال أولاً (لتجنب مشكلة المفتاح الخارجي)
         UserAnswer.query.filter_by(question_id=q.id).delete()
 
-        # 3. حفظ معلومات السؤال للتسجيل
         question_text = q.question_text[:50]
         lesson_title = q.lesson.title if q.lesson else 'بدون درس'
 
-        # 4. حذف السؤال
         db.session.delete(q)
         db.session.commit()
 
-        # 5. تسجيل النشاط (مع تجنب الأخطاء)
         try:
             log_activity(current_user.id, f'حذف سؤالاً: "{question_text}" من درس "{lesson_title}"')
         except Exception as log_err:
@@ -1169,8 +1264,8 @@ def admin_reset_db():
             db.session.flush()
             lesson_ids[lesson_data['title']] = lesson.id
 
-        # إنشاء الأسئلة
-        questions_data = [
+        # إنشاء الأسئلة الافتراضية القديمة (للتوافق مع ما كان موجوداً)
+        default_questions = [
             {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
              'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
             {'lesson': 'مقدمة في البرمجة', 'type': 'TRUE_FALSE', 'text': 'المتغير يمكن أن يحمل قيماً مختلفة أثناء تنفيذ البرنامج.',
@@ -1189,8 +1284,7 @@ def admin_reset_db():
              'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
              'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
         ]
-
-        for q in questions_data:
+        for q in default_questions:
             lesson_title = q.pop('lesson')
             question = Question(
                 lesson_id=lesson_ids.get(lesson_title),
@@ -1205,9 +1299,12 @@ def admin_reset_db():
             )
             db.session.add(question)
 
+        # إضافة الأسئلة الجديدة (الخاصة بالدروس 1-9)
+        add_default_questions()
+
         db.session.commit()
-        log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس جديدة')
-        flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
+        log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس وأسئلة جديدة')
+        flash('✅ تم إعادة تعيين قاعدة البيانات مع التصنيفات والدروس والأسئلة!', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'حدث خطأ أثناء إعادة تعيين قاعدة البيانات: {str(e)}', 'danger')
@@ -1250,6 +1347,9 @@ if __name__ == '__main__':
                     db.session.add_all(lessons)
                     db.session.commit()
                     print("✅ تم إنشاء دروس افتراضية لبرامج النظام.")
+
+        # إضافة الأسئلة الجديدة إذا لم تكن موجودة
+        add_default_questions()
 
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
