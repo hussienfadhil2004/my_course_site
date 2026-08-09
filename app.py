@@ -860,13 +860,11 @@ def admin_edit_category(category_id):
 def admin_delete_category(category_id):
     try:
         category = Category.query.get_or_404(category_id)
-        if category.lessons:
-            flash('لا يمكن حذف تصنيف يحتوي على دروس. قم بنقل الدروس إلى تصنيف آخر أولاً.', 'danger')
-            return redirect(url_for('admin_categories'))
+        # حذف التصنيف مع جميع دروسه (بسبب cascade='all, delete-orphan')
         db.session.delete(category)
         db.session.commit()
         log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
-        flash('تم حذف التصنيف بنجاح.', 'success')
+        flash('تم حذف التصنيف وجميع دروسه بنجاح.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'حدث خطأ أثناء حذف التصنيف: {str(e)}', 'danger')
