@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 import io
 
 load_dotenv()
@@ -59,23 +59,39 @@ def upgrade_database():
     with app.app_context():
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
-        
-        # 1. التحقق من جدول lesson_progress وإضافة is_completed
+        is_postgres = 'postgres' in db.engine.url.drivername
+
+        # 1. التحقق من جدول lesson_progress وإضافة الأعمدة المفقودة
         if 'lesson_progress' in tables:
             columns = [c['name'] for c in inspector.get_columns('lesson_progress')]
-            if 'is_completed' not in columns:
-                print("⚠️ جاري إضافة عمود is_completed إلى lesson_progress...")
-                try:
-                    if 'postgres' in db.engine.url.drivername:
-                        db.session.execute('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT FALSE;')
-                    else:
-                        db.session.execute('ALTER TABLE lesson_progress ADD COLUMN is_completed BOOLEAN DEFAULT 0;')
-                    db.session.commit()
-                    print("✅ تم إضافة العمود is_completed.")
-                except Exception as e:
-                    print(f"⚠️ فشل إضافة العمود is_completed: {e}")
+            missing = []
+
+            # الأعمدة المطلوبة في النموذج
+            required_columns = ['is_completed', 'last_watched', 'completed_at']
+            for col in required_columns:
+                if col not in columns:
+                    missing.append(col)
+
+            if missing:
+                print(f"⚠️ الأعمدة المفقودة في lesson_progress: {missing}")
+                for col in missing:
+                    try:
+                        if col == 'is_completed':
+                            sql_type = 'BOOLEAN DEFAULT FALSE' if is_postgres else 'BOOLEAN DEFAULT 0'
+                        elif col == 'last_watched':
+                            sql_type = 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' if is_postgres else 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+                        elif col == 'completed_at':
+                            sql_type = 'TIMESTAMP' if is_postgres else 'TIMESTAMP'
+                        else:
+                            sql_type = 'TEXT'
+
+                        db.session.execute(text(f'ALTER TABLE lesson_progress ADD COLUMN {col} {sql_type};'))
+                        print(f"✅ تم إضافة العمود {col}.")
+                    except Exception as e:
+                        print(f"⚠️ فشل إضافة العمود {col}: {e}")
+                db.session.commit()
             else:
-                print("✅ العمود is_completed موجود مسبقاً.")
+                print("✅ جميع الأعمدة المطلوبة موجودة في lesson_progress.")
         else:
             print("⚠️ جدول lesson_progress غير موجود، سيتم إنشاؤه لاحقاً.")
 
@@ -91,13 +107,9 @@ def upgrade_database():
             if 'category_id' not in columns:
                 print("⚠️ جاري إضافة عمود category_id إلى lessons...")
                 try:
-                    # التأكد من وجود جدول categories قبل إضافة المفتاح الخارجي
                     if 'categories' not in tables:
-                        db.create_all()  # ينشئ categories إذا لم يكن موجوداً
-                    if 'postgres' in db.engine.url.drivername:
-                        db.session.execute('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id);')
-                    else:
-                        db.session.execute('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id);')
+                        db.create_all()
+                    db.session.execute(text('ALTER TABLE lessons ADD COLUMN category_id INTEGER REFERENCES categories(id);'))
                     db.session.commit()
                     print("✅ تم إضافة العمود category_id.")
                 except Exception as e:
@@ -1102,9 +1114,8 @@ def admin_reset_db():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        upgrade_database()  # ترقية الجداول والأعمدة المفقودة
+        upgrade_database()
         
-        # إنشاء المسؤول إذا لم يوجد
         if not User.query.filter_by(email='admin@mycourse.com').first():
             admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
             admin.set_password('admin123')
@@ -1112,7 +1123,6 @@ if __name__ == '__main__':
             db.session.commit()
             print("✅ Admin: admin@mycourse.com / admin123")
         
-        # إنشاء تصنيفات افتراضية إذا لم توجد
         if Category.query.count() == 0:
             print("⚠️ لا توجد تصنيفات. جاري إنشاء تصنيفات افتراضية...")
             categories = [
@@ -1125,7 +1135,6 @@ if __name__ == '__main__':
             db.session.commit()
             print("✅ تم إنشاء تصنيفات افتراضية.")
             
-            # إنشاء دروس افتراضية لبرامج النظام إذا لم توجد دروس
             if Lesson.query.count() == 0:
                 cat = Category.query.filter_by(name='برامج النظام').first()
                 if cat:
