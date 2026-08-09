@@ -3,15 +3,44 @@
 {% block admin_content %}
 <h4 class="fw-bold mb-4"><i class="fas fa-chart-line me-2 text-primary"></i>لوحة الإحصائيات</h4>
 <div class="row g-4">
-    <div class="col-md-3"><div class="card shadow-sm p-3"><h5>المستخدمين</h5><h2 class="text-primary">{{ total_users }}</h2></div></div>
-    <div class="col-md-3"><div class="card shadow-sm p-3"><h5>الدروس</h5><h2 class="text-success">{{ total_lessons }}</h2></div></div>
-    <div class="col-md-3"><div class="card shadow-sm p-3"><h5>الأسئلة</h5><h2 class="text-warning">{{ total_questions }}</h2></div></div>
-    <div class="col-md-3"><div class="card shadow-sm p-3"><h5>المحاولات</h5><h2 class="text-info">{{ total_attempts }}</h2></div></div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3">
+            <h5>المستخدمين</h5>
+            <h2 class="text-primary">{{ total_users }}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3">
+            <h5>التصنيفات</h5>
+            <h2 class="text-success">{{ total_categories }}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3">
+            <h5>الدروس</h5>
+            <h2 class="text-warning">{{ total_lessons }}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3">
+            <h5>الأسئلة</h5>
+            <h2 class="text-info">{{ total_questions }}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm p-3">
+            <h5>محاولات الاختبارات</h5>
+            <h2 class="text-danger">{{ total_attempts }}</h2>
+        </div>
+    </div>
 </div>
+
 <h5 class="mt-5 fw-bold"><i class="fas fa-clock me-2"></i>آخر النشاطات</h5>
 <div class="list-group">
     {% for log in recent_logs %}
-    <div class="list-group-item"><small>{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</small> - {{ log.action }}</div>
+    <div class="list-group-item">
+        <small>{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</small> - {{ log.action }}
+    </div>
     {% else %}
     <div class="list-group-item text-muted">لا توجد سجلات بعد.</div>
     {% endfor %}

@@ -804,18 +804,27 @@ def admin_delete_user(user_id):
 @admin_required
 def admin_categories():
     if request.method == 'POST':
-        name = request.form.get('name')
-        description = request.form.get('description')
-        icon = request.form.get('icon', 'fa-folder')
-        order = request.form.get('order', 0)
-        if not name:
-            flash('اسم التصنيف مطلوب.', 'danger')
-        else:
-            category = Category(name=name, description=description, icon=icon, order=int(order))
+        try:
+            name = request.form.get('name', '').strip()
+            description = request.form.get('description', '').strip()
+            icon = request.form.get('icon', 'fa-folder').strip()
+            order = request.form.get('order', 0)
+            if not name:
+                flash('اسم التصنيف مطلوب.', 'danger')
+                return redirect(url_for('admin_categories'))
+            category = Category(
+                name=name,
+                description=description,
+                icon=icon,
+                order=int(order) if order else 0
+            )
             db.session.add(category)
             db.session.commit()
             log_activity(current_user.id, f'أضاف تصنيفاً: {name}')
-            flash('تم إضافة التصنيف.', 'success')
+            flash('تم إضافة التصنيف بنجاح.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'حدث خطأ أثناء إضافة التصنيف: {str(e)}', 'danger')
         return redirect(url_for('admin_categories'))
     categories = Category.query.order_by(Category.order).all()
     return render_template('admin/categories.html', categories=categories)
@@ -824,28 +833,43 @@ def admin_categories():
 @login_required
 @admin_required
 def admin_edit_category(category_id):
-    category = Category.query.get_or_404(category_id)
-    category.name = request.form.get('name')
-    category.description = request.form.get('description')
-    category.icon = request.form.get('icon', 'fa-folder')
-    category.order = int(request.form.get('order', 0))
-    db.session.commit()
-    log_activity(current_user.id, f'عدل تصنيفاً: {category.name}')
-    flash('تم تحديث التصنيف.', 'success')
+    try:
+        category = Category.query.get_or_404(category_id)
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        icon = request.form.get('icon', 'fa-folder').strip()
+        order = request.form.get('order', 0)
+        if not name:
+            flash('اسم التصنيف مطلوب.', 'danger')
+            return redirect(url_for('admin_categories'))
+        category.name = name
+        category.description = description
+        category.icon = icon
+        category.order = int(order) if order else 0
+        db.session.commit()
+        log_activity(current_user.id, f'عدل تصنيفاً: {category.name}')
+        flash('تم تحديث التصنيف بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء تحديث التصنيف: {str(e)}', 'danger')
     return redirect(url_for('admin_categories'))
 
 @app.route('/admin/category/<int:category_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def admin_delete_category(category_id):
-    category = Category.query.get_or_404(category_id)
-    if category.lessons:
-        flash('لا يمكن حذف تصنيف يحتوي على دروس. قم بنقل الدروس إلى تصنيف آخر أولاً.', 'danger')
-        return redirect(url_for('admin_categories'))
-    db.session.delete(category)
-    db.session.commit()
-    log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
-    flash('تم حذف التصنيف.', 'success')
+    try:
+        category = Category.query.get_or_404(category_id)
+        if category.lessons:
+            flash('لا يمكن حذف تصنيف يحتوي على دروس. قم بنقل الدروس إلى تصنيف آخر أولاً.', 'danger')
+            return redirect(url_for('admin_categories'))
+        db.session.delete(category)
+        db.session.commit()
+        log_activity(current_user.id, f'حذف تصنيفاً: {category.name}')
+        flash('تم حذف التصنيف بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء حذف التصنيف: {str(e)}', 'danger')
     return redirect(url_for('admin_categories'))
 
 # ==================== إدارة الدروس ====================
@@ -854,29 +878,33 @@ def admin_delete_category(category_id):
 @admin_required
 def admin_lessons():
     if request.method == 'POST':
-        title = request.form.get('title')
-        description = request.form.get('description')
-        content = request.form.get('content')
-        youtube_url = request.form.get('youtube_url')
-        category_id = request.form.get('category_id')
-        order = request.form.get('order', 0)  # إصلاح: تعيين قيمة افتراضية 0
-        is_published = 'is_published' in request.form
-        if not title:
-            flash('عنوان الدرس مطلوب.', 'danger')
-        else:
+        try:
+            title = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            content = request.form.get('content', '').strip()
+            youtube_url = request.form.get('youtube_url', '').strip()
+            category_id = request.form.get('category_id')
+            order = request.form.get('order', 0)
+            is_published = 'is_published' in request.form
+            if not title:
+                flash('عنوان الدرس مطلوب.', 'danger')
+                return redirect(url_for('admin_lessons'))
             lesson = Lesson(
-                title=title, 
-                description=description, 
+                title=title,
+                description=description,
                 content=content,
                 youtube_url=youtube_url,
                 category_id=int(category_id) if category_id else None,
-                order=int(order) if order else 0,  # إصلاح: تحويل آمن
+                order=int(order) if order else 0,
                 is_published=is_published
             )
             db.session.add(lesson)
             db.session.commit()
             log_activity(current_user.id, f'أضاف درساً: {title}')
-            flash('تم إضافة الدرس.', 'success')
+            flash('تم إضافة الدرس بنجاح.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'حدث خطأ أثناء إضافة الدرس: {str(e)}', 'danger')
         return redirect(url_for('admin_lessons'))
     lessons = Lesson.query.order_by(Lesson.order).all()
     categories = Category.query.order_by(Category.order).all()
@@ -886,29 +914,46 @@ def admin_lessons():
 @login_required
 @admin_required
 def admin_edit_lesson(lesson_id):
-    lesson = Lesson.query.get_or_404(lesson_id)
-    lesson.title = request.form.get('title')
-    lesson.description = request.form.get('description')
-    lesson.content = request.form.get('content')
-    lesson.youtube_url = request.form.get('youtube_url')
-    lesson.category_id = int(request.form.get('category_id')) if request.form.get('category_id') else None
-    order_val = request.form.get('order', 0)
-    lesson.order = int(order_val) if order_val else 0
-    lesson.is_published = 'is_published' in request.form
-    db.session.commit()
-    log_activity(current_user.id, f'عدل درساً: {lesson.title}')
-    flash('تم تحديث الدرس.', 'success')
+    try:
+        lesson = Lesson.query.get_or_404(lesson_id)
+        title = request.form.get('title', '').strip()
+        description = request.form.get('description', '').strip()
+        content = request.form.get('content', '').strip()
+        youtube_url = request.form.get('youtube_url', '').strip()
+        category_id = request.form.get('category_id')
+        order = request.form.get('order', 0)
+        is_published = 'is_published' in request.form
+        if not title:
+            flash('عنوان الدرس مطلوب.', 'danger')
+            return redirect(url_for('admin_lessons'))
+        lesson.title = title
+        lesson.description = description
+        lesson.content = content
+        lesson.youtube_url = youtube_url
+        lesson.category_id = int(category_id) if category_id else None
+        lesson.order = int(order) if order else 0
+        lesson.is_published = is_published
+        db.session.commit()
+        log_activity(current_user.id, f'عدل درساً: {lesson.title}')
+        flash('تم تحديث الدرس بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء تحديث الدرس: {str(e)}', 'danger')
     return redirect(url_for('admin_lessons'))
 
 @app.route('/admin/lesson/<int:lesson_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def admin_delete_lesson(lesson_id):
-    lesson = Lesson.query.get_or_404(lesson_id)
-    db.session.delete(lesson)
-    db.session.commit()
-    log_activity(current_user.id, f'حذف درساً: {lesson.title}')
-    flash('تم حذف الدرس.', 'success')
+    try:
+        lesson = Lesson.query.get_or_404(lesson_id)
+        db.session.delete(lesson)
+        db.session.commit()
+        log_activity(current_user.id, f'حذف درساً: {lesson.title}')
+        flash('تم حذف الدرس بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء حذف الدرس: {str(e)}', 'danger')
     return redirect(url_for('admin_lessons'))
 
 @app.route('/admin/questions', methods=['GET', 'POST'])
@@ -916,24 +961,37 @@ def admin_delete_lesson(lesson_id):
 @admin_required
 def admin_questions():
     if request.method == 'POST':
-        lesson_id = request.form.get('lesson_id')
-        q_type = request.form.get('type')
-        question_text = request.form.get('question_text')
-        correct_answer = request.form.get('correct_answer')
-        option_a = request.form.get('option_a')
-        option_b = request.form.get('option_b')
-        option_c = request.form.get('option_c')
-        option_d = request.form.get('option_d')
-        difficulty = request.form.get('difficulty', 'medium')
-        if not lesson_id or not question_text or not correct_answer:
-            flash('الحقول المطلوبة: الدرس، نص السؤال، الإجابة الصحيحة.', 'danger')
-        else:
-            q = Question(lesson_id=int(lesson_id), type=q_type, question_text=question_text, correct_answer=correct_answer,
-                       option_a=option_a, option_b=option_b, option_c=option_c, option_d=option_d, difficulty=difficulty)
+        try:
+            lesson_id = request.form.get('lesson_id')
+            q_type = request.form.get('type')
+            question_text = request.form.get('question_text')
+            correct_answer = request.form.get('correct_answer')
+            option_a = request.form.get('option_a')
+            option_b = request.form.get('option_b')
+            option_c = request.form.get('option_c')
+            option_d = request.form.get('option_d')
+            difficulty = request.form.get('difficulty', 'medium')
+            if not lesson_id or not question_text or not correct_answer:
+                flash('الحقول المطلوبة: الدرس، نص السؤال، الإجابة الصحيحة.', 'danger')
+                return redirect(url_for('admin_questions'))
+            q = Question(
+                lesson_id=int(lesson_id),
+                type=q_type,
+                question_text=question_text,
+                correct_answer=correct_answer,
+                option_a=option_a,
+                option_b=option_b,
+                option_c=option_c,
+                option_d=option_d,
+                difficulty=difficulty
+            )
             db.session.add(q)
             db.session.commit()
             log_activity(current_user.id, f'أضاف سؤالاً للدرس {lesson_id}')
-            flash('تم إضافة السؤال.', 'success')
+            flash('تم إضافة السؤال بنجاح.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'حدث خطأ أثناء إضافة السؤال: {str(e)}', 'danger')
         return redirect(url_for('admin_questions'))
     questions = Question.query.all()
     lessons = Lesson.query.all()
@@ -943,11 +1001,15 @@ def admin_questions():
 @login_required
 @admin_required
 def admin_delete_question(question_id):
-    q = Question.query.get_or_404(question_id)
-    db.session.delete(q)
-    db.session.commit()
-    log_activity(current_user.id, f'حذف سؤالاً رقم {question_id}')
-    flash('تم حذف السؤال.', 'success')
+    try:
+        q = Question.query.get_or_404(question_id)
+        db.session.delete(q)
+        db.session.commit()
+        log_activity(current_user.id, f'حذف سؤالاً رقم {question_id}')
+        flash('تم حذف السؤال بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء حذف السؤال: {str(e)}', 'danger')
     return redirect(url_for('admin_questions'))
 
 @app.route('/admin/announcements', methods=['GET', 'POST'])
@@ -955,16 +1017,20 @@ def admin_delete_question(question_id):
 @admin_required
 def admin_announcements():
     if request.method == 'POST':
-        title = request.form.get('title')
-        content = request.form.get('content')
-        if title and content:
-            ann = Announcement(title=title, content=content, created_by=current_user.id)
-            db.session.add(ann)
-            db.session.commit()
-            log_activity(current_user.id, f'أضاف إعلاناً: {title}')
-            flash('تم نشر الإعلان.', 'success')
-        else:
-            flash('العنوان والمحتوى مطلوبان.', 'danger')
+        try:
+            title = request.form.get('title')
+            content = request.form.get('content')
+            if title and content:
+                ann = Announcement(title=title, content=content, created_by=current_user.id)
+                db.session.add(ann)
+                db.session.commit()
+                log_activity(current_user.id, f'أضاف إعلاناً: {title}')
+                flash('تم نشر الإعلان بنجاح.', 'success')
+            else:
+                flash('العنوان والمحتوى مطلوبان.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'حدث خطأ أثناء إضافة الإعلان: {str(e)}', 'danger')
         return redirect(url_for('admin_announcements'))
     announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
     return render_template('admin/announcements.html', announcements=announcements)
@@ -973,11 +1039,15 @@ def admin_announcements():
 @login_required
 @admin_required
 def admin_delete_announcement(ann_id):
-    ann = Announcement.query.get_or_404(ann_id)
-    db.session.delete(ann)
-    db.session.commit()
-    log_activity(current_user.id, f'حذف إعلاناً')
-    flash('تم حذف الإعلان.', 'success')
+    try:
+        ann = Announcement.query.get_or_404(ann_id)
+        db.session.delete(ann)
+        db.session.commit()
+        log_activity(current_user.id, f'حذف إعلاناً')
+        flash('تم حذف الإعلان بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء حذف الإعلان: {str(e)}', 'danger')
     return redirect(url_for('admin_announcements'))
 
 @app.route('/admin/audit_log')
@@ -998,115 +1068,123 @@ def admin_recovery_requests():
 @login_required
 @admin_required
 def admin_mark_recovery_used(req_id):
-    req = PasswordResetRequest.query.get_or_404(req_id)
-    req.is_used = True
-    db.session.commit()
-    log_activity(current_user.id, f'تم استهلاك طلب استعادة للمستخدم {req.user_id}')
-    flash('تم تحديث الطلب.', 'success')
+    try:
+        req = PasswordResetRequest.query.get_or_404(req_id)
+        req.is_used = True
+        db.session.commit()
+        log_activity(current_user.id, f'تم استهلاك طلب استعادة للمستخدم {req.user_id}')
+        flash('تم تحديث الطلب بنجاح.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ: {str(e)}', 'danger')
     return redirect(url_for('admin_recovery_requests'))
 
 @app.route('/admin/reset_db', methods=['POST'])
 @login_required
 @admin_required
 def admin_reset_db():
-    db.drop_all()
-    db.create_all()
-    
-    admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
-    admin.set_password('admin123')
-    db.session.add(admin)
-    db.session.commit()
-    
-    # إنشاء التصنيفات
-    categories_data = [
-        {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
-        {'name': 'قواعد البيانات', 'description': 'تعلم قواعد البيانات SQL و NoSQL', 'icon': 'fa-database', 'order': 2},
-        {'name': 'الخوارزميات', 'description': 'فهم الخوارزميات وتصميم الحلول', 'icon': 'fa-brain', 'order': 3},
-        {'name': 'برامج النظام', 'description': 'تعلم استخدام برامج الكمبيوتر الأساسية', 'icon': 'fa-desktop', 'order': 4},
-        {'name': 'شبكات الحاسوب', 'description': 'أساسيات الشبكات والاتصالات', 'icon': 'fa-network-wired', 'order': 5},
-    ]
-    
-    created_categories = {}
-    for cat_data in categories_data:
-        cat = Category(**cat_data)
-        db.session.add(cat)
-        db.session.flush()
-        created_categories[cat_data['name']] = cat.id
-    
-    # إنشاء الدروس
-    lessons_data = [
-        {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
-         'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
-         'youtube': 'https://www.youtube.com/embed/HB4I2C2n7qg?si=ixHZkDQKR0uw5Q7V', 'order': 1},
-        {'category': 'برامج النظام', 'title': 'برنامج الدفتر (Notepad)', 'description': 'تعلم استخدام برنامج الدفتر لكتابة النصوص',
-         'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق.</p>',
-         'youtube': 'https://www.youtube.com/embed/abc123', 'order': 1},
-        {'category': 'برامج النظام', 'title': 'برنامج الرسام (Paint)', 'description': 'تعلم استخدام برنامج الرسام للرسم والتصميم',
-         'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي.</p>',
-         'youtube': 'https://www.youtube.com/embed/def456', 'order': 2},
-        {'category': 'برامج النظام', 'title': 'برنامج الملاحظات (Sticky Notes)', 'description': 'تعلم استخدام الملاحظات اللاصقة الرقمية',
-         'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة.</p>',
-         'youtube': 'https://www.youtube.com/embed/ghi789', 'order': 3},
-        {'category': 'برامج النظام', 'title': 'مسجل الصوت (Sound Recorder)', 'description': 'تعلم استخدام مسجل الصوت لتسجيل الأصوات',
-         'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون.</p>',
-         'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
-    ]
-    
-    lesson_ids = {}
-    for lesson_data in lessons_data:
-        cat_name = lesson_data.pop('category')
-        lesson = Lesson(
-            category_id=created_categories[cat_name],
-            title=lesson_data['title'],
-            description=lesson_data['description'],
-            content=lesson_data['content'],
-            youtube_url=lesson_data['youtube'],
-            order=lesson_data['order'],
-            is_published=True
-        )
-        db.session.add(lesson)
-        db.session.flush()
-        lesson_ids[lesson_data['title']] = lesson.id
-    
-    # إنشاء الأسئلة
-    questions_data = [
-        {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
-         'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
-        {'lesson': 'مقدمة في البرمجة', 'type': 'TRUE_FALSE', 'text': 'المتغير يمكن أن يحمل قيماً مختلفة أثناء تنفيذ البرنامج.',
-         'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
-        {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'MCQ', 'text': 'ما هي اختصار حفظ ملف في الدفتر؟',
-         'a': 'Ctrl+S', 'b': 'Ctrl+O', 'c': 'Ctrl+N', 'd': 'Ctrl+P', 'correct': 'Ctrl+S', 'difficulty': 'easy'},
-        {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'TRUE_FALSE', 'text': 'الدفتر يدعم تنسيق النصوص مثل الألوان والخطوط.',
-         'a': 'صحيح', 'b': 'خطأ', 'correct': 'خطأ', 'difficulty': 'easy'},
-        {'lesson': 'برنامج الرسام (Paint)', 'type': 'MCQ', 'text': 'ما هي أداة الرسم التي تستخدم لرسم خطوط مستقيمة؟',
-         'a': 'الخط', 'b': 'المنحنى', 'c': 'القلم الرصاص', 'd': 'الفرشاة', 'correct': 'الخط', 'difficulty': 'easy'},
-        {'lesson': 'برنامج الرسام (Paint)', 'type': 'TRUE_FALSE', 'text': 'يمكنك تغيير حجم الصورة في برنامج الرسام.',
-         'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
-        {'lesson': 'برنامج الملاحظات (Sticky Notes)', 'type': 'MCQ', 'text': 'ما هي اختصار إنشاء ملاحظة جديدة؟',
-         'a': 'Ctrl+N', 'b': 'Ctrl+O', 'c': 'Ctrl+S', 'd': 'Ctrl+P', 'correct': 'Ctrl+N', 'difficulty': 'easy'},
-        {'lesson': 'مسجل الصوت (Sound Recorder)', 'type': 'MCQ', 'text': 'ما هو الزر المستخدم لبدء التسجيل؟',
-         'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
-         'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
-    ]
-    
-    for q in questions_data:
-        lesson_title = q.pop('lesson')
-        question = Question(
-            lesson_id=lesson_ids.get(lesson_title),
-            type=q['type'],
-            question_text=q['text'],
-            option_a=q.get('a'),
-            option_b=q.get('b'),
-            option_c=q.get('c'),
-            option_d=q.get('d'),
-            correct_answer=q['correct'],
-            difficulty=q['difficulty']
-        )
-        db.session.add(question)
-    
-    db.session.commit()
-    log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس جديدة')
-    flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
+    try:
+        db.drop_all()
+        db.create_all()
+        
+        admin = User(student_id='ADMIN001', full_name='مدير النظام', email='admin@mycourse.com', is_admin=True)
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+        
+        # إنشاء التصنيفات
+        categories_data = [
+            {'name': 'أساسيات البرمجة', 'description': 'تعلم أساسيات البرمجة والمفاهيم العامة', 'icon': 'fa-code', 'order': 1},
+            {'name': 'قواعد البيانات', 'description': 'تعلم قواعد البيانات SQL و NoSQL', 'icon': 'fa-database', 'order': 2},
+            {'name': 'الخوارزميات', 'description': 'فهم الخوارزميات وتصميم الحلول', 'icon': 'fa-brain', 'order': 3},
+            {'name': 'برامج النظام', 'description': 'تعلم استخدام برامج الكمبيوتر الأساسية', 'icon': 'fa-desktop', 'order': 4},
+            {'name': 'شبكات الحاسوب', 'description': 'أساسيات الشبكات والاتصالات', 'icon': 'fa-network-wired', 'order': 5},
+        ]
+        
+        created_categories = {}
+        for cat_data in categories_data:
+            cat = Category(**cat_data)
+            db.session.add(cat)
+            db.session.flush()
+            created_categories[cat_data['name']] = cat.id
+        
+        # إنشاء الدروس
+        lessons_data = [
+            {'category': 'أساسيات البرمجة', 'title': 'مقدمة في البرمجة', 'description': 'تعلم أساسيات البرمجة ومفاهيمها', 
+             'content': '<h3>ما هي البرمجة؟</h3><p>البرمجة هي عملية كتابة مجموعة من التعليمات التي ينفذها الحاسوب لحل مشكلة معينة.</p>',
+             'youtube': 'https://www.youtube.com/embed/HB4I2C2n7qg?si=ixHZkDQKR0uw5Q7V', 'order': 1},
+            {'category': 'برامج النظام', 'title': 'برنامج الدفتر (Notepad)', 'description': 'تعلم استخدام برنامج الدفتر لكتابة النصوص',
+             'content': '<h3>برنامج الدفتر (Notepad)</h3><p>برنامج بسيط لكتابة النصوص بدون تنسيق.</p>',
+             'youtube': 'https://www.youtube.com/embed/abc123', 'order': 1},
+            {'category': 'برامج النظام', 'title': 'برنامج الرسام (Paint)', 'description': 'تعلم استخدام برنامج الرسام للرسم والتصميم',
+             'content': '<h3>برنامج الرسام (Paint)</h3><p>برنامج بسيط للرسم الرقمي.</p>',
+             'youtube': 'https://www.youtube.com/embed/def456', 'order': 2},
+            {'category': 'برامج النظام', 'title': 'برنامج الملاحظات (Sticky Notes)', 'description': 'تعلم استخدام الملاحظات اللاصقة الرقمية',
+             'content': '<h3>برنامج الملاحظات (Sticky Notes)</h3><p>برنامج لكتابة الملاحظات السريعة.</p>',
+             'youtube': 'https://www.youtube.com/embed/ghi789', 'order': 3},
+            {'category': 'برامج النظام', 'title': 'مسجل الصوت (Sound Recorder)', 'description': 'تعلم استخدام مسجل الصوت لتسجيل الأصوات',
+             'content': '<h3>مسجل الصوت (Sound Recorder)</h3><p>برنامج لتسجيل الأصوات من الميكروفون.</p>',
+             'youtube': 'https://www.youtube.com/embed/jkl012', 'order': 4},
+        ]
+        
+        lesson_ids = {}
+        for lesson_data in lessons_data:
+            cat_name = lesson_data.pop('category')
+            lesson = Lesson(
+                category_id=created_categories[cat_name],
+                title=lesson_data['title'],
+                description=lesson_data['description'],
+                content=lesson_data['content'],
+                youtube_url=lesson_data['youtube'],
+                order=lesson_data['order'],
+                is_published=True
+            )
+            db.session.add(lesson)
+            db.session.flush()
+            lesson_ids[lesson_data['title']] = lesson.id
+        
+        # إنشاء الأسئلة
+        questions_data = [
+            {'lesson': 'مقدمة في البرمجة', 'type': 'MCQ', 'text': 'ما هي لغة البرمجة التي تتميز بسهولة تعلمها؟', 
+             'a': 'بايثون', 'b': 'سي++', 'c': 'جافا', 'd': 'راست', 'correct': 'بايثون', 'difficulty': 'easy'},
+            {'lesson': 'مقدمة في البرمجة', 'type': 'TRUE_FALSE', 'text': 'المتغير يمكن أن يحمل قيماً مختلفة أثناء تنفيذ البرنامج.',
+             'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
+            {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'MCQ', 'text': 'ما هي اختصار حفظ ملف في الدفتر؟',
+             'a': 'Ctrl+S', 'b': 'Ctrl+O', 'c': 'Ctrl+N', 'd': 'Ctrl+P', 'correct': 'Ctrl+S', 'difficulty': 'easy'},
+            {'lesson': 'برنامج الدفتر (Notepad)', 'type': 'TRUE_FALSE', 'text': 'الدفتر يدعم تنسيق النصوص مثل الألوان والخطوط.',
+             'a': 'صحيح', 'b': 'خطأ', 'correct': 'خطأ', 'difficulty': 'easy'},
+            {'lesson': 'برنامج الرسام (Paint)', 'type': 'MCQ', 'text': 'ما هي أداة الرسم التي تستخدم لرسم خطوط مستقيمة؟',
+             'a': 'الخط', 'b': 'المنحنى', 'c': 'القلم الرصاص', 'd': 'الفرشاة', 'correct': 'الخط', 'difficulty': 'easy'},
+            {'lesson': 'برنامج الرسام (Paint)', 'type': 'TRUE_FALSE', 'text': 'يمكنك تغيير حجم الصورة في برنامج الرسام.',
+             'a': 'صحيح', 'b': 'خطأ', 'correct': 'صحيح', 'difficulty': 'easy'},
+            {'lesson': 'برنامج الملاحظات (Sticky Notes)', 'type': 'MCQ', 'text': 'ما هي اختصار إنشاء ملاحظة جديدة؟',
+             'a': 'Ctrl+N', 'b': 'Ctrl+O', 'c': 'Ctrl+S', 'd': 'Ctrl+P', 'correct': 'Ctrl+N', 'difficulty': 'easy'},
+            {'lesson': 'مسجل الصوت (Sound Recorder)', 'type': 'MCQ', 'text': 'ما هو الزر المستخدم لبدء التسجيل؟',
+             'a': 'زر التسجيل (Record)', 'b': 'زر الإيقاف (Stop)', 'c': 'زر التشغيل (Play)', 'd': 'زر الإيقاف المؤقت (Pause)',
+             'correct': 'زر التسجيل (Record)', 'difficulty': 'easy'},
+        ]
+        
+        for q in questions_data:
+            lesson_title = q.pop('lesson')
+            question = Question(
+                lesson_id=lesson_ids.get(lesson_title),
+                type=q['type'],
+                question_text=q['text'],
+                option_a=q.get('a'),
+                option_b=q.get('b'),
+                option_c=q.get('c'),
+                option_d=q.get('d'),
+                correct_answer=q['correct'],
+                difficulty=q['difficulty']
+            )
+            db.session.add(question)
+        
+        db.session.commit()
+        log_activity(current_user.id, 'إعادة تعيين قاعدة البيانات مع تصنيفات ودروس جديدة')
+        flash('✅ تم إعادة تعيين قاعدة البيانات مع 5 تصنيفات و 7 دروس وأسئلة!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء إعادة تعيين قاعدة البيانات: {str(e)}', 'danger')
     return redirect(url_for('admin_dashboard'))
 
 # ==================== نقطة التشغيل ====================

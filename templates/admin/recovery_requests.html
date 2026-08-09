@@ -1,40 +1,54 @@
 {% extends "admin/admin_base.html" %}
+
 {% block admin_content %}
-<h3>🔐 طلبات الاستعادة</h3>
-{% if requests %}
-<table class="table table-bordered">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>نوع الطلب</th>
-            <th>جهة الاتصال</th>
-            <th>التاريخ</th>
-            <th>إجراء</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for req in requests %}
-    <tr>
-        <td>{{ req.id }}</td>
-        <td>
-            {% if req.type == 'username' %}
-                <span class="badge bg-info">استعادة اسم المستخدم</span>
+<h4 class="fw-bold mb-4"><i class="fas fa-key me-2 text-primary"></i>طلبات استعادة كلمة المرور</h4>
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>المستخدم</th>
+                <th>التاريخ</th>
+                <th>الحالة</th>
+                <th>الإجراء</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                    {% if req.user %}
+                        {{ req.user.full_name }} ({{ req.user.student_id }})
+                    {% else %}
+                        <span class="text-muted">مستخدم محذوف</span>
+                    {% endif %}
+                </td>
+                <td>{{ req.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    {% if req.is_used %}
+                        <span class="badge bg-success">تم الاستخدام</span>
+                    {% elif req.expires_at < now %}
+                        <span class="badge bg-danger">منتهي</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">قيد الانتظار</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if not req.is_used and req.expires_at >= now %}
+                    <form method="POST" action="{{ url_for('admin_mark_recovery_used', req_id=req.id) }}" style="display:inline;">
+                        <button class="btn btn-sm btn-primary" type="submit">تحديد كمستخدم</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
             {% else %}
-                <span class="badge bg-warning">استعادة كلمة المرور</span>
-            {% endif %}
-        </td>
-        <td>{{ req.contact }}</td>
-        <td>{{ req.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
-        <td>
-            <form method="POST" action="/admin/recovery/resolve/{{ req.id }}" style="display:inline">
-                <button class="btn btn-sm btn-success">✅ حل الطلب</button>
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">لا توجد طلبات استعادة معلقة حالياً.</p>
-{% endif %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">لا توجد طلبات استعادة.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

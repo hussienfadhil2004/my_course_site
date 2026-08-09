@@ -2,10 +2,21 @@
 
 {% block admin_content %}
 <h4 class="fw-bold mb-4"><i class="fas fa-users me-2 text-primary"></i>إدارة المستخدمين</h4>
+
 <div class="table-responsive">
     <table class="table table-hover">
         <thead>
-            <tr><th>#</th><th>المعرف</th><th>الاسم</th><th>الإيميل</th><th>الهاتف</th><th>المستوى</th><th>الحالة</th><th>الإجراءات</th></tr>
+            <tr>
+                <th>#</th>
+                <th>المعرف</th>
+                <th>الاسم</th>
+                <th>الإيميل</th>
+                <th>الهاتف</th>
+                <th>المستوى</th>
+                <th>نقاط XP</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+            </tr>
         </thead>
         <tbody>
             {% for u in users %}
@@ -16,6 +27,7 @@
                 <td>{{ u.email }}</td>
                 <td>{{ u.phone or '-' }}</td>
                 <td>{{ u.level }}</td>
+                <td>{{ u.xp_points }}</td>
                 <td>{% if u.is_banned %}<span class="badge bg-danger">محظور</span>{% else %}<span class="badge bg-success">نشط</span>{% endif %}</td>
                 <td>
                     <form method="POST" action="{{ url_for('admin_toggle_ban', user_id=u.id) }}" style="display:inline;">

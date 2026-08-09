@@ -6,7 +6,7 @@
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <h5>إضافة درس جديد</h5>
-        <form method="POST">
+        <form method="POST" action="{{ url_for('admin_lessons') }}">
             <div class="row g-2">
                 <div class="col-md-3"><input class="form-control" name="title" placeholder="العنوان" required></div>
                 <div class="col-md-3"><input class="form-control" name="description" placeholder="الوصف المختصر"></div>
@@ -24,7 +24,7 @@
                 </div>
                 <div class="col-md-2"><input class="form-control" name="order" type="number" placeholder="الترتيب" value="0"></div>
                 <div class="col-md-2"><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="is_published" checked> <label>منشور</label></div></div>
-                <div class="col-md-2"><button class="btn btn-success w-100">إضافة</button></div>
+                <div class="col-md-2"><button class="btn btn-success w-100" type="submit">إضافة</button></div>
             </div>
         </form>
         <small class="text-muted">يمكنك استخدام HTML داخل المحتوى النصي لتنسيق النص.</small>
@@ -52,8 +52,8 @@
             <div class="col-md-1"><input class="form-control form-control-sm" name="order" type="number" value="{{ l.order or 0 }}"></div>
             <div class="col-md-1"><input class="form-check-input" type="checkbox" name="is_published" {% if l.is_published %}checked{% endif %}></div>
             <div class="col-md-2">
-                <button class="btn btn-sm btn-primary">تعديل</button>
-                <button type="button" class="btn btn-sm btn-danger" onclick="if(confirm('حذف الدرس؟')) document.getElementById('del-{{ l.id }}').submit();">حذف</button>
+                <button class="btn btn-sm btn-primary" type="submit">تعديل</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="if(confirm('حذف الدرس نهائياً؟')) document.getElementById('del-{{ l.id }}').submit();">حذف</button>
                 <form id="del-{{ l.id }}" method="POST" action="{{ url_for('admin_delete_lesson', lesson_id=l.id) }}" style="display:none;"></form>
             </div>
         </form>
